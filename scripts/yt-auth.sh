@@ -24,7 +24,8 @@ CREDENTIALS_FILE="${CONFIG_DIR}/client_secrets.json"
 AUTH_URI="https://accounts.google.com/o/oauth2/auth"
 TOKEN_URI="https://oauth2.googleapis.com/token"
 REDIRECT_URI="urn:ietf:wg:oauth:2.0:oob"
-SCOPE="https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube"
+# Scopes must be URL-encoded (space = %20)
+SCOPE="https://www.googleapis.com/auth/youtube.upload%20https://www.googleapis.com/auth/youtube"
 
 # Colors
 RED='\033[0;31m'

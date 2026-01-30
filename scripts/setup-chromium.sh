@@ -592,7 +592,7 @@ cmd_headless() {
         --user-data-dir="$USER_DATA_DIR" \
         --dump-dom "data:text/html,<h1>VIDCOM Headless Test</h1>" 2>/dev/null)
     
-    if echo "$output" | grep -q "VIDCOM Headless Test"; then
+    if echo "$output" | grep -q "VIDCOM Headless Test"; thenorganisation
         log "✓ Headless mode working"
         return 0
     else
