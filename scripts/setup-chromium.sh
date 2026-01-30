@@ -111,6 +111,178 @@ clear_profile_locks() {
     fi
 }
 
+#------------------------------------------------------------------------------
+# Set up Chrome preferences for VIDCOM use case
+# - Disable password saving prompts
+# - Set homepage to VIDCOM dashboard
+# - Optimize for container/testing environment
+#------------------------------------------------------------------------------
+setup_chrome_preferences() {
+    local prefs_dir="$USER_DATA_DIR/Default"
+    local prefs_file="$prefs_dir/Preferences"
+    
+    mkdir -p "$prefs_dir"
+    
+    # Only create if doesn't exist (don't overwrite user customizations)
+    if [[ ! -f "$prefs_file" ]]; then
+        log "Initializing Chrome preferences for VIDCOM..."
+        cat > "$prefs_file" << 'PREFS_EOF'
+{
+  "credentials_enable_service": false,
+  "credentials_enable_autosignin": false,
+  "profile": {
+    "password_manager_enabled": false,
+    "default_content_setting_values": {
+      "notifications": 2,
+      "geolocation": 2,
+      "media_stream_mic": 2,
+      "media_stream_camera": 2,
+      "automatic_downloads": 2,
+      "midi_sysex": 2,
+      "push_messaging": 2,
+      "ssl_cert_decisions": 2,
+      "metro_switch_to_desktop": 2,
+      "protected_media_identifier": 2,
+      "ppapi_broker": 2,
+      "site_engagement": 2,
+      "durable_storage": 2,
+      "usb_guard": 2,
+      "bluetooth_guard": 2,
+      "background_sync": 2,
+      "sensors": 2,
+      "clipboard": 2,
+      "payment_handler": 2,
+      "usb_chooser_data": 2,
+      "file_system_write_guard": 2,
+      "serial_guard": 2,
+      "hid_guard": 2,
+      "window_placement": 2,
+      "local_fonts": 2,
+      "idle_detection": 2
+    },
+    "content_settings": {
+      "exceptions": {
+        "cookies": {
+          "*,*": {
+            "setting": 1
+          }
+        }
+      }
+    },
+    "block_third_party_cookies": true
+  },
+  "enable_do_not_track": true,
+  "safebrowsing": {
+    "enabled": true,
+    "enhanced": false
+  },
+  "privacy_sandbox": {
+    "m1": {
+      "topics_enabled": false,
+      "fledge_enabled": false,
+      "ad_measurement_enabled": false
+    },
+    "anti_abuse_initialized": true
+  },
+  "savefile": {
+    "default_directory": "/workspaces/vidcom/output"
+  },
+  "download": {
+    "default_directory": "/workspaces/vidcom/output",
+    "prompt_for_download": false
+  },
+  "browser": {
+    "show_home_button": true,
+    "check_default_browser": false,
+    "custom_chrome_frame": false,
+    "has_seen_welcome_page": true
+  },
+  "bookmark_bar": {
+    "show_on_all_tabs": true
+  },
+  "session": {
+    "restore_on_startup": 4,
+    "startup_urls": [
+      "http://localhost:8765"
+    ]
+  },
+  "translate_blocked_languages": ["en"],
+  "translate": {
+    "enabled": false
+  },
+  "autofill": {
+    "profile_enabled": false,
+    "credit_card_enabled": false
+  },
+  "search": {
+    "suggest_enabled": false
+  },
+  "alternate_error_pages": {
+    "enabled": false
+  },
+  "dns_prefetching": {
+    "enabled": false
+  },
+  "net": {
+    "network_prediction_options": 2
+  },
+  "webkit": {
+    "webprefs": {
+      "hyperlink_auditing_enabled": false
+    }
+  },
+  "hardware_acceleration_mode": {
+    "enabled": false
+  }
+}
+PREFS_EOF
+    fi
+    
+    # Set up bookmarks for quick access
+    local bookmarks_file="$prefs_dir/Bookmarks"
+    if [[ ! -f "$bookmarks_file" ]]; then
+        cat > "$bookmarks_file" << 'BOOKMARKS_EOF'
+{
+   "checksum": "vidcom_default",
+   "roots": {
+      "bookmark_bar": {
+         "children": [
+            {
+               "name": "VIDCOM Dashboard",
+               "type": "url",
+               "url": "http://localhost:8765"
+            },
+            {
+               "name": "YouTube Studio",
+               "type": "url",
+               "url": "https://studio.youtube.com"
+            },
+            {
+               "name": "YouTube Uploads",
+               "type": "url",
+               "url": "https://www.youtube.com/my_videos"
+            }
+         ],
+         "name": "Bookmarks bar",
+         "type": "folder"
+      },
+      "other": {
+         "children": [],
+         "name": "Other bookmarks",
+         "type": "folder"
+      },
+      "synced": {
+         "children": [],
+         "name": "Mobile bookmarks",
+         "type": "folder"
+      }
+   },
+   "version": 1
+}
+BOOKMARKS_EOF
+    fi
+}
+
 cmd_clean() {
     log "Cleaning browser session data..."
     
@@ -295,8 +467,9 @@ cmd_launch() {
         die "Chromium not installed. Run: $0 install"
     fi
     
-    # Create user data dir
+    # Create user data dir and initialize preferences
     mkdir -p "$USER_DATA_DIR"
+    setup_chrome_preferences
     
     # Clear stale locks if --force or in container
     if ! clear_profile_locks "$force"; then
@@ -318,7 +491,7 @@ cmd_launch() {
         display_type="wayland"
     fi
     
-    # Build args
+    # Build args - optimized for container/devcontainer environments
     local args=(
         "--user-data-dir=$USER_DATA_DIR"
         "--no-first-run"
@@ -326,6 +499,17 @@ cmd_launch() {
         "--disable-background-networking"
         "--disable-sync"
         "--disable-translate"
+        # Disable password manager prompts (we use OAuth tokens, not saved passwords)
+        "--password-store=basic"
+        # Container-friendly: disable features that need D-Bus/dconf
+        "--disable-features=PasswordManager,TranslateUI"
+        "--disable-infobars"
+        # GPU/rendering flags for container without GPU drivers
+        "--disable-gpu"
+        "--disable-software-rasterizer"
+        "--disable-dev-shm-usage"
+        # Suppress D-Bus errors (no system bus in containers)
+        "--disable-dbus"
     )
     
     # Display server specific args
@@ -353,7 +537,8 @@ cmd_launch() {
     log "  Profile: $USER_DATA_DIR"
     [[ -n "$url" ]] && log "  URL: $url"
     
-    "$chrome_path" "${args[@]}" &
+    # Suppress dconf/D-Bus stderr noise (redirect to /dev/null but keep stdout)
+    "$chrome_path" "${args[@]}" 2>/dev/null &
     
     log "Chromium launched (PID: $!)"
     log ""
