@@ -68,7 +68,8 @@ RUN if id ubuntu &>/dev/null; then \
     usermod -aG sudo vidcom && \
     echo "vidcom ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers && \
     mkdir -p /home/vidcom/.config /home/vidcom/.cache /home/vidcom/.local/share && \
-    chown -R vidcom:vidcom /home/vidcom
+    chown -R 1000:1000 /home/vidcom && \
+    chmod 755 /home/vidcom
 
 USER vidcom
 WORKDIR /home/vidcom
@@ -78,7 +79,8 @@ RUN touch ~/.hushlogin
 # Install nvm, Node.js, and Dev-Control
 ENV NVM_DIR=/home/vidcom/.config/nvm
 ENV BASH_ENV=/home/vidcom/.bashrc
-RUN mkdir -p "$NVM_DIR" && \
+RUN export HOME=/home/vidcom && \
+    mkdir -p "$NVM_DIR" && \
     curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash && \
     echo 'export NVM_DIR="$HOME/.config/nvm"' >> ~/.bashrc && \
     echo '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"' >> ~/.bashrc && \
@@ -89,6 +91,14 @@ RUN mkdir -p "$NVM_DIR" && \
 
 # Add node/npm/npx to PATH for VS Code extension host discovery
 ENV PATH=$NVM_DIR/versions/node/v25.4.0/bin:$PATH
+
+# Bake user-specific git config into image
+RUN git config --global user.email 69734795+xaoscience@users.noreply.github.com && \
+    git config --global user.name xaoscience && \
+    git config --global init.defaultBranch main && \
+    git config --global commit.gpgsign true && \
+    git config --global user.signingkey 31B0D17183B69144 && \
+    git config --global gpg.program gpg
 
 # Build FFmpeg from master with NVENC/NVDEC + SRT support (full CUDA)
 RUN sudo apt-get update && sudo apt-get install -y \
@@ -215,5 +225,8 @@ RUN echo 'prefix=/usr/local' | sudo tee /usr/local/lib/pkgconfig/onnxruntime.pc 
     && echo 'Version: 1.20.1' | sudo tee -a /usr/local/lib/pkgconfig/onnxruntime.pc \
     && echo 'Cflags: -I${includedir}' | sudo tee -a /usr/local/lib/pkgconfig/onnxruntime.pc \
     && echo 'Libs: -L${libdir} -lonnxruntime' | sudo tee -a /usr/local/lib/pkgconfig/onnxruntime.pc
+
+# Clean up GPG keyring created during nginx verification (interferes with host GPG agent mount)
+RUN rm -rf ~/.gnupg
 
 WORKDIR /workspaces
