@@ -58,6 +58,8 @@ EOF
 
 #------------------------------------------------------------------------------
 # Clear stale profile locks (safe in container environments)
+# Note: Lock files are symlinks, so we use -L (or -h) instead of -e
+#       because -e returns false for broken symlinks
 #------------------------------------------------------------------------------
 clear_profile_locks() {
     local force="${1:-false}"
@@ -69,7 +71,8 @@ clear_profile_locks() {
     
     local found_locks=false
     for lock in "${lock_files[@]}"; do
-        if [[ -e "$lock" ]]; then
+        # Use -L to detect symlinks (locks are symlinks, often broken after container restart)
+        if [[ -L "$lock" ]] || [[ -e "$lock" ]]; then
             found_locks=true
             break
         fi
@@ -79,17 +82,23 @@ clear_profile_locks() {
         return 0
     fi
     
-    # In a container, locks from previous sessions are always stale
-    # Check if we're in a container by looking for /.dockerenv or cgroup
+    # Detect container/devcontainer environment where locks are always stale
+    # after restart (no persistent Chrome process survives container rebuild)
     local in_container=false
-    if [[ -f /.dockerenv ]] || grep -q 'docker\|containerd' /proc/1/cgroup 2>/dev/null; then
+    if [[ -f /.dockerenv ]] \
+        || grep -q 'docker\|containerd' /proc/1/cgroup 2>/dev/null \
+        || [[ -n "${REMOTE_CONTAINERS:-}" ]] \
+        || [[ -n "${CODESPACES:-}" ]] \
+        || [[ -d "/workspaces" ]] \
+        || [[ -f /run/.containerenv ]]; then
         in_container=true
     fi
     
     if [[ "$force" == "true" ]] || [[ "$in_container" == "true" ]]; then
         log "Clearing stale profile locks..."
         for lock in "${lock_files[@]}"; do
-            if [[ -e "$lock" ]]; then
+            # Use -L to detect symlinks (even broken ones)
+            if [[ -L "$lock" ]] || [[ -e "$lock" ]]; then
                 rm -f "$lock"
                 log "  Removed: $(basename "$lock")"
             fi
