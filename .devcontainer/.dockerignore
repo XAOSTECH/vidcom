@@ -1,0 +1,49 @@
+# Git
+.git/
+.gitignore
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# IDE/Editor
+.idea/
+*.swp
+*.swo
+*~
+
+# Build artifacts
+builds/
+export/
+dist/
+build/
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+.cache/
+.npm/
+.yarn/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Environment/secrets
+.env
+.env.local
+.env.*.local
+
+# Temporary files
+*.tmp
+*.log
+logs/
+
+# Test coverage
+coverage/
+.coverage
+htmlcov/
+
+# Project-specific
+.tmp/
+.bak/

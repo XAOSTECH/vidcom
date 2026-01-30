@@ -1,0 +1,168 @@
+name: Bash Linting with Auto-Fix Suggestions
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - develop
+    paths:
+      - '**.sh'
+      - '.github/workflows/bash-lint-advanced.yml'
+  pull_request:
+    branches:
+      - main
+      - master
+      - develop
+    paths:
+      - '**.sh'
+  workflow_dispatch:
+    inputs:
+      auto_fix:
+        description: 'Attempt automatic fixes for common issues'
+        required: false
+        default: 'false'
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+  actions: read
+
+jobs:
+  shellcheck-analysis:
+    name: ShellCheck Analysis & Suggestions
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      checks: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+
+      - name: Run ShellCheck with JSON output
+        id: shellcheck
+        continue-on-error: true
+        run: |
+          mkdir -p /tmp/lint
+          
+          # Run ShellCheck for all scripts
+          find . -type f -name "*.sh" ! -path "./.git/*" ! -path "./node_modules/*" ! -path "./vendor/*" \
+            -exec shellcheck -f json {} + > /tmp/lint/results.json 2>&1 || true
+          
+          # Count issues
+          ERRORS=$(jq '[.[] | select(.level=="error")] | length' /tmp/lint/results.json 2>/dev/null || echo "0")
+          WARNINGS=$(jq '[.[] | select(.level=="warning")] | length' /tmp/lint/results.json 2>/dev/null || echo "0")
+          
+          echo "errors=$ERRORS" >> $GITHUB_OUTPUT
+          echo "warnings=$WARNINGS" >> $GITHUB_OUTPUT
+          
+          cat /tmp/lint/results.json
+
+      - name: Parse and annotate issues
+        if: always()
+        run: |
+          if [[ ! -f /tmp/lint/results.json ]]; then
+            echo "No linting results found"
+            exit 0
+          fi
+          
+          jq -r '.[] | "::notice file=\(.file),line=\(.line),col=\(.column)::[\(.code)] \(.message) - See: https://www.shellcheck.net/wiki/\(.code)"' /tmp/lint/results.json 2>/dev/null || true
+
+      - name: Generate suggestions markdown
+        id: suggestions
+        run: |
+          {
+            echo "# 🔍 Bash Linting Report"
+            echo ""
+            echo "**Errors**: ${{ steps.shellcheck.outputs.errors }}"
+            echo "**Warnings**: ${{ steps.shellcheck.outputs.warnings }}"
+            echo ""
+            
+            if [[ -f /tmp/lint/results.json ]]; then
+              echo "## Issues Found:"
+              echo ""
+              
+              jq -r '.[] | 
+                "### [\(.code)] \(.message)\n" +
+                "- **File**: `\(.file)` (line \(.line), col \(.column))\n" +
+                "- **Severity**: \(.level)\n" +
+                "- **Wiki**: https://www.shellcheck.net/wiki/\(.code)\n"' /tmp/lint/results.json 2>/dev/null || echo "No issues parsed"
+            fi
+          } > /tmp/lint/suggestions.md
+          
+          cat /tmp/lint/suggestions.md
+
+      - name: Suggest fixes on PR
+        if: github.event_name == 'pull_request' && (steps.shellcheck.outputs.errors > 0 || steps.shellcheck.outputs.warnings > 0)
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const results = JSON.parse(fs.readFileSync('/tmp/lint/results.json', 'utf8'));
+            
+            if (results.length === 0) return;
+            
+            // Group issues by file
+            const issuesByFile = {};
+            results.forEach(issue => {
+              if (!issuesByFile[issue.file]) {
+                issuesByFile[issue.file] = [];
+              }
+              issuesByFile[issue.file].push(issue);
+            });
+            
+            // Create review with suggestions
+            const reviewComments = [];
+            Object.entries(issuesByFile).forEach(([file, issues]) => {
+              issues.forEach(issue => {
+                reviewComments.push({
+                  path: file,
+                  line: issue.line,
+                  side: 'RIGHT',
+                  body: `**[SC${issue.code}]** ${issue.message}\n\n[📖 Read more](https://www.shellcheck.net/wiki/${issue.code})`
+                });
+              });
+            });
+            
+            if (reviewComments.length > 0) {
+              github.rest.pulls.createReview({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.issue.number,
+                event: 'COMMENT',
+                comments: reviewComments.slice(0, 50) // GitHub limit: 50 comments per review
+              }).catch(err => {
+                console.log('Note: Could not create inline review (file may not be in diff)');
+                console.log(err.message);
+              });
+            }
+
+  summary:
+    name: Linting Summary
+    runs-on: ubuntu-latest
+    needs: [shellcheck-analysis]
+    if: always()
+    
+    steps:
+      - name: Create summary
+        run: |
+          echo "## 📊 Bash Linting Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Errors**: ${{ needs.shellcheck-analysis.outputs.errors }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Warnings**: ${{ needs.shellcheck-analysis.outputs.warnings }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Next Steps:" >> $GITHUB_STEP_SUMMARY
+          echo "1. Review issues in workflow annotations" >> $GITHUB_STEP_SUMMARY
+          echo "2. Check PR comments for detailed suggestions" >> $GITHUB_STEP_SUMMARY
+          echo "3. Follow linked wiki pages for explanations" >> $GITHUB_STEP_SUMMARY
+          echo "4. Create PR with fixes" >> $GITHUB_STEP_SUMMARY

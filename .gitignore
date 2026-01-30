@@ -1,0 +1,117 @@
+# =============================================================================
+# VIDCOM .gitignore - Security-focused exclusions
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# SENSITIVE DATA - OAuth tokens, API credentials
+# -----------------------------------------------------------------------------
+# NEVER commit these
+*.token
+*.tokens
+*_token.json
+*_tokens.json
+client_secret*.json
+client_secrets.json
+credentials.json
+oauth*.json
+.oauth/
+.credentials/
+
+# Config files that may contain secrets (use .example versions)
+config/vidcom.conf
+config/*.local.conf
+*.env
+.env.*
+!.env.example
+
+# -----------------------------------------------------------------------------
+# BUILD ARTIFACTS
+# -----------------------------------------------------------------------------
+build/
+*.o
+*.d
+*.a
+*.so
+*.dylib
+
+# -----------------------------------------------------------------------------
+# CHROMIUM / BROWSER
+# -----------------------------------------------------------------------------
+# Chromium binary and data (large, platform-specific)
+chromium/
+chrome-linux/
+chrome-linux64/
+chrome-win/
+chrome-mac/
+.chromium/
+chromium-*/
+
+# Browser user data (contains session cookies, history)
+.browser-data/
+chrome-user-data/
+puppeteer-data/
+
+# -----------------------------------------------------------------------------
+# MODELS (large files, download separately)
+# -----------------------------------------------------------------------------
+models/*.onnx
+models/*.pb
+models/*.pt
+models/*.pth
+models/*.bin
+models/*.safetensors
+!models/.gitkeep
+
+# Game signature database (may contain user data)
+models/game_signatures.db
+
+# -----------------------------------------------------------------------------
+# OUTPUT / RUNTIME DATA
+# -----------------------------------------------------------------------------
+output/
+dashboard/
+*.mp4
+*.mkv
+*.webm
+*.jpg
+*.jpeg
+*.png
+!docs/*.png
+!docs/*.jpg
+
+# Logs
+*.log
+logs/
+
+# Temp files
+.tmp/
+tmp/
+*.tmp
+*.temp
+
+# -----------------------------------------------------------------------------
+# EDITOR / IDE
+# -----------------------------------------------------------------------------
+.vscode/settings.json
+.vscode/launch.json
+!.vscode/extensions.json
+!.vscode/tasks.json
+*.swp
+*.swo
+*~
+.idea/
+*.sublime-*
+
+# -----------------------------------------------------------------------------
+# OS FILES
+# -----------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# -----------------------------------------------------------------------------
+# NODE (if using for dashboard)
+# -----------------------------------------------------------------------------
+node_modules/
+package-lock.json
+yarn.lock

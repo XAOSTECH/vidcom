@@ -1,0 +1,59 @@
+# VIDCOM Configuration Example
+# Copy this to vidcom.conf and edit with your settings
+# DO NOT commit vidcom.conf - it may contain sensitive paths
+
+[general]
+verbose = 1
+use_gpu = true
+device_id = 0
+
+[models]
+classifier_model = models/resnet50.onnx
+game_database = models/game_signatures.db
+feature_model = resnet50
+feature_dim = 2048
+
+[extraction]
+mode = interval
+interval = 1.0
+scene_threshold = 0.4
+target_width = 224
+target_height = 224
+
+[encoding]
+shorts_width = 1080
+shorts_height = 1920
+quality = 20
+preset = p4
+max_duration = 60
+crop_focus = center
+audio_bitrate = 128
+
+[youtube]
+# OAuth credentials - get from Google Cloud Console
+# Store client_secrets.json in ~/.config/vidcom/ (NOT in repo)
+default_category = 20
+default_privacy = unlisted
+notify_subscribers = false
+auto_title = true
+title_template = "{game} - Highlight #{timestamp}"
+description_template = "Gaming highlight from {game}\n\nExtracted automatically by VIDCOM"
+default_tags = gaming,highlights,shorts
+
+[browser]
+# Chromium path - run scripts/setup-chromium.sh to install
+chromium_path = chromium/chrome-linux/chrome
+user_data_dir = .browser-data
+# Display for X11 forwarding (set to host display for GUI)
+# display = :0
+
+[dashboard]
+port = 8765
+host = 0.0.0.0
+
+[highlight_detection]
+min_duration = 10
+max_duration = 55
+audio_peak_threshold = -10
+scene_density_threshold = 0.5
+game_confidence_threshold = 0.7

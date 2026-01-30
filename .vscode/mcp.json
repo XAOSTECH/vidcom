@@ -1,0 +1,39 @@
+{
+  "inputs": [
+    {
+      "type": "promptString",
+      "id": "github_mcp_pat",
+      "description": "GitHub Personal Access Token",
+      "password": true
+    },
+    {
+      "type": "promptString",
+      "id": "firecrawlApiKey",
+      "description": "Firecrawl API Key (optional)",
+      "password": true
+    }
+  ],
+  "servers": {
+    
+    "github": {
+      "type": "http",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "headers": {
+        "Authorization": "Bearer ${input:github_mcp_pat}"
+      }
+    },
+    "stackoverflow": {
+      "type": "http",
+      "url": "https://mcp.stackoverflow.com"
+    },
+    "firecrawl": {
+      "command": "/home/vidcom/.config/nvm/versions/node/v25.5.0/bin/npx",
+      "args": ["-y", "firecrawl-mcp"],
+      "env": {
+        "FIRECRAWL_API_KEY": "${input:firecrawlApiKey}",
+        "PATH": "/home/vidcom/.config/nvm/versions/node/v25.5.0/bin:${env:PATH}"
+      },
+      "type": "stdio"
+    }
+  }
+}

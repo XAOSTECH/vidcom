@@ -1,0 +1,103 @@
+name: Dependabot Auto-merge
+
+on:
+  pull_request_target:
+    types: [opened, reopened, labelled, synchronise]
+  workflow_dispatch:
+    inputs:
+      pull_numbers:
+        description: 'PR numbers to merge (e.g. 1, 2, 3)'
+        required: false
+        type: string
+
+permissions:
+  pull-requests: write
+  contents: write
+  checks: read
+  statuses: read
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    outputs:
+      pr_numbers: ${{ steps.check.outputs.pr_numbers }}
+      should_merge: ${{ steps.check.outputs.should_merge }}
+    steps:
+      - name: Inspect PR author/labels
+        id: check
+        uses: actions/github-script@v6
+        env:
+          PULL_NUMBERS: ${{ github.event.inputs.pull_numbers }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { owner, repo } = context.repo;
+            let prNumbers = [];
+            
+            if (process.env.PULL_NUMBERS) {
+              prNumbers = process.env.PULL_NUMBERS
+                .split(/[,\s]+/)
+                .map(n => parseInt(n.trim(), 10))
+                .filter(n => !isNaN(n));
+            } else if (context.payload.pull_request && context.payload.pull_request.number) {
+              prNumbers = [context.payload.pull_request.number];
+            }
+            
+            if (prNumbers.length === 0) {
+              core.info('No PR numbers found.');
+              core.setOutput('pr_numbers', '[]');
+              core.setOutput('should_merge', 'false');
+              return;
+            }
+
+            const validPRs = [];
+            for (const prNum of prNumbers) {
+              try {
+                const prRes = await github.rest.pulls.get({ owner, repo, pull_number: prNum });
+                const pr = prRes.data;
+                const author = pr.user && pr.user.login;
+                const labels = (pr.labels || []).map(l => l.name);
+                const isDependabot = author === 'dependabot[bot]';
+                const isRepoOwner = author === owner;
+                const isCloudflare = author === 'cloudflare-workers-and-pages[bot]';
+                const isPages = author === 'github-pages[bot]' || author === 'github-pages-deploy-action[bot]';
+                const isLabel = labels.includes('automerge');
+
+                if (isDependabot || isRepoOwner || isCloudflare || isPages || isLabel) {
+                  validPRs.push(prNum);
+                  core.info(`PR #${prNum} valid (author=${author}, isDependabot=${isDependabot}, isRepoOwner=${isRepoOwner}, isCloudflare=${isCloudflare}, isPages=${isPages}, isLabel=${isLabel})`);
+                } else {
+                  core.info(`PR #${prNum} skipped (not an allowed author and no automerge label)`);
+                }
+              } catch (error) {
+                core.info(`PR #${prNum} not found or error: ${error.message}`);
+              }
+            }
+            
+            core.setOutput('pr_numbers', JSON.stringify(validPRs));
+            core.setOutput('should_merge', String(validPRs.length > 0));
+
+
+  automerge-dependabot:
+    needs: guard
+    if: needs.guard.outputs.should_merge == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Merge PRs
+        uses: actions/github-script@v6
+        env:
+          PR_NUMBERS: ${{ needs.guard.outputs.pr_numbers }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { owner, repo } = context.repo;
+            const prNumbers = JSON.parse(process.env.PR_NUMBERS || '[]');
+            
+            for (const prNumber of prNumbers) {
+              try {
+                await github.rest.pulls.merge({ owner, repo, pull_number: prNumber });
+                core.info(`Merged PR #${prNumber}`);
+              } catch (error) {
+                core.setFailed(`Failed to merge PR #${prNumber}: ${error.message}`);
+              }
+            }

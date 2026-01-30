@@ -1,0 +1,422 @@
+# ============================================================================
+# Release Workflow Template (release.yml)
+# ============================================================================
+#
+# ORIGIN: https://github.com/xaoscience/dev-control
+# This workflow template is part of the dev-control toolkit.
+# See: https://github.com/xaoscience/dev-control/blob/main/workflows-templates/
+#
+# ============================================================================
+#
+# Automates GitHub releases for any project using packaging.sh.
+# Builds tarball, creates GitHub release, manages version and latest tags.
+#
+# TRIGGERS:
+#   - Manual dispatch (recommended for controlled releases)
+#   - Push to tags matching v* (requires careful tagging)
+#
+# ARTIFACTS:
+#   - PROJECT-X.Y.Z.tar.gz - Main release tarball
+#   - Optional: Additional tarballs (configure in 'Build additional packages' step)
+#
+# SAFEGUARDS:
+#   ✓ Version format validation (semantic versioning)
+#   ✓ Commit validation (minimum changes before release)
+#   ✓ Manual approval workflow support
+#   ✓ Tag existence checks to prevent overwrites
+#   ✓ CHANGELOG validation
+#
+# WHAT IT DOES:
+#   1. Validates version format and commit count
+#   2. Builds main tarball using packaging.sh
+#   3. Optionally builds additional packages (customise as needed)
+#   4. Creates GitHub release with tarballs attached
+#   5. Updates 'latest' tag to point to new release
+#   6. Generates release notes from commits
+#
+# CUSTOMISATION:
+#   - Edit the 'Build additional packages' step to add project-specific tarballs
+#   - Modify release notes template in 'Generate release notes' step
+#   - Adjust validation rules as needed for your project
+#
+# RECOMMENDED WORKFLOW:
+#
+#   1. Create feature branch: git checkout -b feat/my-feature
+#   2. Make changes and test locally: ./tests/run_tests.sh
+#   3. Create PR and merge to main
+#   4. Update CHANGELOG.md with version section
+#   5. Commit changelog: git commit -m "chore: update CHANGELOG for v1.0.0"
+#   6. Create tag: git tag -a v1.0.0 -m "Release v1.0.0"
+#   7. Push tag: git push origin v1.0.0
+#
+# OR use manual dispatch for testing/special releases:
+#   - Actions → Release → Run workflow → Enter version
+#
+# BEST PRACTICES:
+#   - Always update CHANGELOG.md before releasing
+#   - Use semantic versioning (v1.0.0, not v1.0 or v01.00.00)
+#   - Create annotated tags: git tag -a v1.0.0 -m "message"
+#   - Wait for at least 3 commits since last release
+#   - Run full test suite locally before tagging
+#   - Review commits to ensure quality with: git log v0.9.0..main --oneline
+#
+# ============================================================================
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.0.0 without v prefix)'
+        required: true
+        type: string
+      prerelease:
+        description: 'Mark as pre-release'
+        required: false
+        type: boolean
+        default: false
+      draft:
+        description: 'Create as draft release'
+        required: false
+        type: boolean
+        default: false
+      skip_lib:
+        description: 'Skip building lib-only tarball'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+env:
+  GUM_VERSION: '0.17.0'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for changelog generation
+
+      - name: Determine version
+        id: version
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            # Extract version from tag (remove 'v' prefix)
+            VERSION="${GITHUB_REF#refs/tags/v}"
+            TAG_NAME="${GITHUB_REF#refs/tags/}"
+          else
+            # Manual dispatch - use input
+            VERSION="${{ github.event.inputs.version }}"
+            TAG_NAME="v${VERSION}"
+          fi
+          
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "tag_name=${TAG_NAME}" >> $GITHUB_OUTPUT
+          echo "📦 Release version: ${VERSION}"
+          echo "🏷️ Tag: ${TAG_NAME}"
+
+      - name: Validate version format
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?$ ]]; then
+            echo "❌ Invalid version format: $VERSION"
+            echo "Expected: X.Y.Z or X.Y.Z-suffix (e.g., 1.0.0, 2.1.0-beta)"
+            exit 1
+          fi
+          echo "✅ Version format valid: $VERSION"
+
+      - name: Validate commit count
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG_NAME="${{ steps.version.outputs.tag_name }}"
+          
+          # Get previous tag (if any)
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          
+          if [[ -n "$PREV_TAG" ]]; then
+            COMMIT_COUNT=$(git log "${PREV_TAG}..HEAD" --oneline | wc -l)
+            echo "📊 Commits since ${PREV_TAG}: ${COMMIT_COUNT}"
+            
+            # Minimum 2 commits for release (1 for changelog, 1+ for actual changes)
+            if [[ $COMMIT_COUNT -lt 2 ]]; then
+              echo "⚠️ Warning: Only ${COMMIT_COUNT} commit(s) since last release"
+              echo "ℹ️ Consider waiting for more changes before releasing"
+              echo "ℹ️ Current practice: aim for 3+ commits per release"
+              # Don't fail - allow manual override for hotfixes
+            fi
+            
+            git log "${PREV_TAG}..HEAD" --oneline
+          else
+            echo "📊 Initial release - no previous tags"
+            COMMIT_COUNT=$(git log --oneline | wc -l)
+            echo "📊 Total commits in repository: ${COMMIT_COUNT}"
+          fi
+
+      - name: Validate CHANGELOG.md
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          
+          if [[ ! -f "CHANGELOG.md" ]]; then
+            echo "⚠️ Warning: CHANGELOG.md not found"
+            echo "ℹ️ Consider adding CHANGELOG.md for better release documentation"
+          else
+            # Check if version appears in CHANGELOG
+            if grep -q "## \[${VERSION}\]" CHANGELOG.md 2>/dev/null || \
+               grep -q "## ${VERSION}" CHANGELOG.md 2>/dev/null; then
+              echo "✅ CHANGELOG.md updated for version ${VERSION}"
+              echo ""
+              echo "📝 Changelog entry:"
+              grep -A 20 "## \[${VERSION}\]" CHANGELOG.md 2>/dev/null || \
+              grep -A 20 "## ${VERSION}" CHANGELOG.md
+            else
+              echo "⚠️ Warning: Version ${VERSION} not found in CHANGELOG.md"
+              echo "ℹ️ Consider adding a changelog entry for this release"
+              echo ""
+              echo "Expected format:"
+              echo "## [${VERSION}] - $(date +%Y-%m-%d)"
+              echo "### Added"
+              echo "- Feature 1"
+              echo "### Fixed"
+              echo "- Fix 1"
+            fi
+          fi
+
+      - name: Create tag (manual dispatch only)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          TAG_NAME="${{ steps.version.outputs.tag_name }}"
+          
+          # Check if tag already exists
+          if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
+            echo "⚠️ Tag $TAG_NAME already exists, skipping tag creation"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git tag -a "$TAG_NAME" -m "Release $TAG_NAME"
+            git push origin "$TAG_NAME"
+            echo "✅ Created and pushed tag: $TAG_NAME"
+          fi
+
+      - name: Update package version in config
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          
+          # Update .dc-package.yaml if it exists
+          if [[ -f ".dc-package.yaml" ]]; then
+            sed -i "s/^version:.*/version: ${VERSION}/" .dc-package.yaml
+            echo "✅ Updated .dc-package.yaml to version ${VERSION}"
+          fi
+          
+          # Create temporary config if none exists
+          if [[ ! -f ".dc-package.yaml" ]]; then
+            cat > .dc-package.yaml << EOF
+          name: $(basename "$GITHUB_REPOSITORY")
+          version: ${VERSION}
+          description: "Version ${VERSION}"
+          homepage: https://github.com/$GITHUB_REPOSITORY
+          license: GPL-3.0-or-later
+          entry_point: ./dc
+          include:
+            - scripts/
+            - config/
+            - docs/
+            - plugins/
+            - README.md
+            - LICENSE
+            - install.sh
+          dependencies:
+            - git
+            - gh
+            - jq
+            - gum
+          EOF
+            echo "✅ Created temporary .dc-package.yaml"
+          fi
+
+      - name: Install Gum
+        run: |
+          curl -fsSL "https://github.com/charmbracelet/gum/releases/download/v${GUM_VERSION}/gum_${GUM_VERSION}_Linux_x86_64.tar.gz" \
+            | tar xz --strip-components=1 -C /tmp "gum_${GUM_VERSION}_Linux_x86_64/gum"
+          sudo mv /tmp/gum /usr/local/bin/
+          echo "✅ Installed Gum v${GUM_VERSION}"
+
+      - name: Build full tarball
+        run: |
+          chmod +x scripts/packaging.sh scripts/lib/*.sh 2>/dev/null || true
+          bash scripts/packaging.sh --tarball --verbose
+          echo "✅ Full tarball built successfully"
+
+      # ========================================================================
+      # CUSTOMISE: Build additional packages (optional)
+      # ========================================================================
+      # Uncomment and modify this step to build additional tarballs.
+      # Example: A lightweight lib-only package, docs package, etc.
+      #
+      # - name: Build additional packages
+      #   run: |
+      #     VERSION="${{ steps.version.outputs.version }}"
+      #     PKG_NAME="myproject-extra-${VERSION}"
+      #     PKG_DIR="dist/${PKG_NAME}"
+      #     
+      #     mkdir -p "$PKG_DIR"
+      #     
+      #     # Copy files for additional package
+      #     cp -r src/lib/* "$PKG_DIR/"
+      #     cp LICENSE "$PKG_DIR/"
+      #     
+      #     # Create README with origin attribution
+      #     {
+      #       echo "# My Project Extra Package"
+      #       echo ""
+      #       echo "## Origin"
+      #       echo ""
+      #       echo "This package was built from: https://github.com/$GITHUB_REPOSITORY"
+      #       echo "Release: ${VERSION}"
+      #       echo ""
+      #       echo "## Installation"
+      #       echo "..."
+      #     } > "$PKG_DIR/README.md"
+      #     
+      #     echo "${VERSION}" > "$PKG_DIR/VERSION"
+      #     
+      #     cd dist
+      #     tar czf "${PKG_NAME}.tar.gz" "${PKG_NAME}"
+      #     sha256sum "${PKG_NAME}.tar.gz" > "${PKG_NAME}.tar.gz.sha256"
+      #     cd ..
+      # ========================================================================
+
+      - name: List build artifacts
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          echo "📦 Build artifacts:"
+          ls -la dist/
+          
+          # Get main tarball info (first .tar.gz that's not a sub-package)
+          TARBALL=$(ls dist/*.tar.gz 2>/dev/null | head -1)
+          if [[ -n "$TARBALL" ]]; then
+            echo "tarball_path=${TARBALL}" >> $GITHUB_ENV
+            echo "tarball_name=$(basename "$TARBALL")" >> $GITHUB_ENV
+            
+            if [[ -f "${TARBALL}.sha256" ]]; then
+              SHA256=$(cat "${TARBALL}.sha256" | awk '{print $1}')
+              echo "tarball_sha256=${SHA256}" >> $GITHUB_ENV
+              echo "🔐 Tarball SHA256: ${SHA256}"
+            fi
+          fi
+          
+          # Count all tarballs for summary
+          TARBALL_COUNT=$(ls dist/*.tar.gz 2>/dev/null | wc -l)
+          echo "tarball_count=${TARBALL_COUNT}" >> $GITHUB_ENV
+
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG_NAME="${{ steps.version.outputs.tag_name }}"
+          
+          # Get previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          
+          # Generate changelog
+          NOTES_FILE=$(mktemp)
+          
+          cat > "$NOTES_FILE" << EOF
+          ## What's Changed
+          
+          EOF
+          
+          if [[ -n "$PREV_TAG" ]]; then
+            echo "### Commits since ${PREV_TAG}" >> "$NOTES_FILE"
+            echo "" >> "$NOTES_FILE"
+            git log "${PREV_TAG}..HEAD" --pretty=format:"- %s (%h)" >> "$NOTES_FILE"
+          else
+            echo "### Initial Release" >> "$NOTES_FILE"
+            echo "" >> "$NOTES_FILE"
+            git log --pretty=format:"- %s (%h)" -10 >> "$NOTES_FILE"
+          fi
+          
+          cat >> "$NOTES_FILE" << EOF
+          
+          ## Installation
+          
+          ### Quick Install (tarball)
+          \`\`\`bash
+          curl -fsSL https://github.com/$GITHUB_REPOSITORY/releases/download/${TAG_NAME}/${tarball_name} | tar xz
+          \`\`\`
+          
+          ## Checksums
+          
+          | File | SHA256 |
+          |------|--------|
+          | ${tarball_name} | \`${tarball_sha256}\` |
+          
+          ---
+          
+          **Full Changelog**: https://github.com/$GITHUB_REPOSITORY/compare/${PREV_TAG}...${TAG_NAME}
+          
+          ---
+          *Release workflow powered by [dev-control](https://github.com/xaoscience/dev-control)*
+          EOF
+          
+          # Output for next step
+          echo "notes_file=${NOTES_FILE}" >> $GITHUB_OUTPUT
+          
+          echo "📝 Release notes generated"
+          cat "$NOTES_FILE"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag_name }}
+          name: "Release ${{ steps.version.outputs.tag_name }}"
+          body_path: ${{ steps.release_notes.outputs.notes_file }}
+          draft: ${{ github.event.inputs.draft || false }}
+          prerelease: ${{ github.event.inputs.prerelease || false }}
+          files: |
+            dist/*.tar.gz
+            dist/*.sha256
+          fail_on_unmatched_files: false
+          generate_release_notes: false
+
+      - name: Update 'latest' tag
+        run: |
+          TAG_NAME="${{ steps.version.outputs.tag_name }}"
+          
+          # Delete existing 'latest' tag (local and remote)
+          git tag -d latest 2>/dev/null || true
+          git push origin :refs/tags/latest 2>/dev/null || true
+          
+          # Create new 'latest' tag pointing to this release
+          git tag latest "$TAG_NAME"
+          git push origin latest
+          
+          echo "✅ Updated 'latest' tag to point to ${TAG_NAME}"
+
+      - name: Summary
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG_NAME="${{ steps.version.outputs.tag_name }}"
+          
+          echo "## 🎉 Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Version | ${VERSION} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tag | ${TAG_NAME} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Artifacts | ${tarball_count} tarball(s) |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Links" >> $GITHUB_STEP_SUMMARY
+          echo "- [Release](https://github.com/$GITHUB_REPOSITORY/releases/tag/${TAG_NAME})" >> $GITHUB_STEP_SUMMARY
+          echo "- [Download](https://github.com/$GITHUB_REPOSITORY/releases/download/${TAG_NAME}/${tarball_name})" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "*Workflow template from [dev-control](https://github.com/xaoscience/dev-control)*" >> $GITHUB_STEP_SUMMARY
