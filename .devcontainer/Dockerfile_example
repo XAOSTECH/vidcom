@@ -14,17 +14,16 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y \
     gnupg \
     libsecret-tools \
     nano \
-    && sed -i 's|http://archive.ubuntu.com/ubuntu|https://mirror.unix-solutions.be/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources 2>/dev/null || \
-       sed -i 's|http://archive.ubuntu.com/ubuntu|https://mirror.unix-solutions.be/ubuntu|g' /etc/apt/sources.list 2>/dev/null || true \
     && sed -i '/en_GB/s/^# //g' /etc/locale.gen \
     && locale-gen en_GB.UTF-8 \
     && update-locale LANG=en_GB.UTF-8 LC_ALL=en_GB.UTF-8 \
     && rm -rf /var/lib/apt/lists/*
 
 # Set locale and timezone
+# CUSTOMIZE: Adjust locale and timezone to your preference
 ENV LANG=en_GB.UTF-8 \
     LC_ALL=en_GB.UTF-8 \
-    TZ=Europe/Brussels \
+    TZ=YOUR_TIMEZONE \
     EDITOR=nano
 
 # Configure timezone
@@ -85,20 +84,21 @@ RUN export HOME=/home/vidcom && \
     curl -o- "https://raw.githubusercontent.com/nvm-sh/nvm/${NVM_LATEST}/install.sh" | bash && \
     echo 'export NVM_DIR="$HOME/.config/nvm"' >> ~/.bashrc && \
     echo '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"' >> ~/.bashrc && \
-    bash -c 'source $NVM_DIR/nvm.sh && nvm install 25 && nvm alias default 25' && \
-    curl -fsSL --retry 3 --retry-delay 5 https://github.com/xaoscience/dev-control/archive/refs/tags/latest.tar.gz | tar -xz && \
-    mv dev-control-* ~/.dev-control && \
-    bash -c 'bash ~/.dev-control/scripts/alias-loading.sh <<< A'
+    bash -c 'source $NVM_DIR/nvm.sh && nvm install 25 && nvm alias default 25'
+
+# OPTIONAL: Install your preferred shell aliases/tools here
+# Example: curl -fsSL https://your-dotfiles-repo/install.sh | bash
 
 # Add node/npm/npx to PATH for VS Code extension host discovery
 ENV PATH=$NVM_DIR/versions/node/v25.4.0/bin:$PATH
 
 # Bake user-specific git config into image
-RUN git config --global user.email 69734795+xaoscience@users.noreply.github.com && \
-    git config --global user.name xaoscience && \
+# CUSTOMIZE: Replace with your GitHub details
+RUN git config --global user.email YOUR_GITHUB_ID+YOUR_USERNAME@users.noreply.github.com && \
+    git config --global user.name YOUR_USERNAME && \
     git config --global init.defaultBranch main && \
     git config --global commit.gpgsign true && \
-    git config --global user.signingkey 31B0D17183B69144 && \
+    git config --global user.signingkey YOUR_GPG_KEY_ID && \
     git config --global gpg.program gpg
 
 # Build FFmpeg from master with NVENC/NVDEC + SRT support (full CUDA)
