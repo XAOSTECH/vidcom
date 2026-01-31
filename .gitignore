@@ -98,6 +98,8 @@ tmp/
 .vscode/launch.json
 !.vscode/extensions.json
 !.vscode/tasks.json
+.devcontainer/*
+!.devcontainer/*_example
 *.swp
 *.swo
 *~
