@@ -18,10 +18,13 @@
   // - GPG agent socket location may vary
   // - Docker/Podman socket path depends on your setup
   // - GitHub CLI config mount requires 'gh auth login' on host first
+  // - libnvcuvid.so.1 is required for NVDEC hardware video decoding
   "mounts": [
     "source=/run/user/${localEnv:UID}/gnupg/S.gpg-agent,target=/run/user/1000/gnupg/S.gpg-agent,type=bind",
     "source=${localEnv:HOME}/.config/gh,target=/home/vidcom/.config/gh,type=bind,consistency=cached",
-    "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind"
+    "source=/run/user/${localEnv:UID}/wayland-0,target=/run/user/1000/wayland-0,type=bind",
+    "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind",
+    "source=/usr/lib/x86_64-linux-gnu/libnvcuvid.so.1,target=/usr/lib/x86_64-linux-gnu/libnvcuvid.so.1,type=bind,readonly"
   ],
   "containerEnv": {
     "GPG_TTY": "$(tty)",

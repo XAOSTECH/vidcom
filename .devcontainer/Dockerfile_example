@@ -54,20 +54,15 @@ ENV PATH=/usr/local/cuda/bin:${PATH} \
 
 # Create user vidcom with sudo privileges
 RUN if id ubuntu &>/dev/null; then \
-        # Rename ubuntu user and ensure home exists
         groupmod -n vidcom ubuntu && \
-        usermod -l vidcom -d /home/vidcom ubuntu && \
-        if [ ! -d /home/vidcom ]; then mkdir -p /home/vidcom; fi && \
-        if [ -d /home/ubuntu ] && [ ! -d /home/vidcom ]; then \
-            mv /home/ubuntu /home/vidcom; \
-        fi; \
+        usermod -l vidcom -m -d /home/vidcom ubuntu; \
     else \
         useradd -m -s /bin/bash vidcom; \
     fi && \
     usermod -aG sudo vidcom && \
     echo "vidcom ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers && \
     mkdir -p /home/vidcom/.config /home/vidcom/.cache /home/vidcom/.local/share && \
-    chown -R 1000:1000 /home/vidcom && \
+    chown -R vidcom:vidcom /home/vidcom && \
     chmod 755 /home/vidcom
 
 USER vidcom
@@ -234,16 +229,23 @@ RUN echo 'prefix=/usr/local' | sudo tee /usr/local/lib/pkgconfig/onnxruntime.pc 
     && echo 'Cflags: -I${includedir}' | sudo tee -a /usr/local/lib/pkgconfig/onnxruntime.pc \
     && echo 'Libs: -L${libdir} -lonnxruntime' | sudo tee -a /usr/local/lib/pkgconfig/onnxruntime.pc
 
-# Download YOLOv8n ONNX model for highlight detection (removes Python dependency)
-# This uses the official Ultralytics pre-exported model
-RUN YOLO_VERSION=$(curl -fsSL https://api.github.com/repos/ultralytics/assets/releases/latest | grep -oP '"tag_name": "\K[^"]+') && \
-    echo "Downloading YOLOv8n ONNX from ultralytics/assets ${YOLO_VERSION}..." && \
-    sudo mkdir -p /opt/models && \
-    sudo curl -fsSL "https://github.com/ultralytics/assets/releases/download/${YOLO_VERSION}/yolov8n.onnx" -o /opt/models/yolov8n.onnx && \
-    sudo chmod 644 /opt/models/yolov8n.onnx && \
-    ls -lh /opt/models/
+# Export YOLOv8n to ONNX format (build-time only, Python removed after)
+# Uses a temporary venv to avoid polluting the system
+RUN sudo apt-get update && sudo apt-get install -y --no-install-recommends \
+        python3-pip python3-venv \
+    && python3 -m venv /tmp/yolo-export \
+    && /tmp/yolo-export/bin/pip install --quiet ultralytics onnx onnxslim onnxruntime \
+    && /tmp/yolo-export/bin/python -c "from ultralytics import YOLO; model = YOLO('yolov8n.pt'); model.export(format='onnx', imgsz=640, opset=17, simplify=True)" \
+    && sudo mkdir -p /opt/models \
+    && sudo mv yolov8n.onnx /opt/models/yolov8n.onnx \
+    && sudo chmod 644 /opt/models/yolov8n.onnx \
+    && rm -rf /tmp/yolo-export yolov8n.pt ~/.config/Ultralytics \
+    && sudo apt-get purge -y python3-pip python3-venv \
+    && sudo apt-get autoremove -y \
+    && sudo rm -rf /var/lib/apt/lists/* \
+    && ls -lh /opt/models/
 
 # Clean up GPG keyring created during nginx verification (interferes with host GPG agent mount)
-RUN rm -rf ~/.gnupg
+RUN sudo rm -rf ~/.gnupg
 
 WORKDIR /workspaces
