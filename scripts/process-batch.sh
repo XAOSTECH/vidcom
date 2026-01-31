@@ -1,6 +1,9 @@
 #!/bin/bash
 # process-batch.sh - Batch process highlights to YouTube Shorts
-# Reads a manifest file with highlight timestamps and metadata
+# 
+# Two modes:
+#   1. Manual: Reads a manifest file with highlight timestamps
+#   2. Auto: Uses vidcom highlight detection to find highlights
 #
 # Manifest format (JSON lines):
 # {"input": "stream.mp4", "start": "01:23:45", "duration": 55, "title": "Epic Moment", "tags": "gaming,highlights"}
@@ -9,6 +12,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+VIDCOM="${PROJECT_DIR}/build/vidcom"
 
 # Colors
 RED='\033[0;31m'
@@ -28,14 +32,26 @@ UPLOAD=false
 DRY_RUN=false
 CATEGORY_ID=20
 PRIVACY="unlisted"
+AUTO_DETECT=false
+GAME=""
+CONFIDENCE=0.5
+MAX_CLIPS=10
 
 #------------------------------------------------------------------------------
 # Parse arguments
 #------------------------------------------------------------------------------
 usage() {
-    echo "Usage: $0 <manifest.jsonl> [options]"
+    echo "Usage: $0 <manifest.jsonl|video.mp4> [options]"
+    echo ""
+    echo "Modes:"
+    echo "  Manifest mode: Process predefined highlight timestamps from JSONL"
+    echo "  Auto mode:     Use --auto to detect highlights automatically"
     echo ""
     echo "Options:"
+    echo "  --auto           Auto-detect highlights using vidcom"
+    echo "  --game NAME      Game type for detection (fortnite, valorant, etc.)"
+    echo "  --confidence N   Detection threshold 0.0-1.0 (default: 0.5)"
+    echo "  --max-clips N    Maximum clips to generate (default: 10)"
     echo "  --output DIR     Output directory (default: ./output)"
     echo "  --upload         Upload to YouTube after encoding"
     echo "  --dry-run        Show what would be done without executing"
@@ -46,8 +62,9 @@ usage() {
     echo "Manifest format (JSON Lines):"
     echo '  {"input": "stream.mp4", "start": "01:23:45", "duration": 55, "title": "Title", "description": "Desc", "tags": "tag1,tag2"}'
     echo ""
-    echo "Example:"
+    echo "Examples:"
     echo "  $0 highlights.jsonl --upload --privacy public"
+    echo "  $0 stream.mp4 --auto --game fortnite --max-clips 5"
 }
 
 if [[ $# -lt 1 ]]; then
@@ -60,6 +77,22 @@ shift
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --auto)
+            AUTO_DETECT=true
+            shift
+            ;;
+        --game)
+            GAME="$2"
+            shift 2
+            ;;
+        --confidence)
+            CONFIDENCE="$2"
+            shift 2
+            ;;
+        --max-clips)
+            MAX_CLIPS="$2"
+            shift 2
+            ;;
         --output)
             OUTPUT_DIR="$2"
             shift 2
@@ -93,17 +126,113 @@ while [[ $# -gt 0 ]]; do
 done
 
 #------------------------------------------------------------------------------
-# Validate manifest
+# Auto-detect highlights function
+#------------------------------------------------------------------------------
+detect_highlights() {
+    local video="$1"
+    local manifest="$2"
+    
+    log_step "Auto-detecting highlights in: $video"
+    
+    # Build vidcom command
+    local cmd="$VIDCOM highlights \"$video\" --confidence $CONFIDENCE"
+    [[ -n "$GAME" ]] && cmd+=" --game $GAME"
+    
+    log_info "Running: $cmd"
+    
+    # Run highlight detection
+    if ! eval $cmd; then
+        log_error "Highlight detection failed"
+        return 1
+    fi
+    
+    # Check for output JSON
+    local json_file="${OUTPUT_DIR}/highlights.json"
+    if [[ ! -f "$json_file" ]]; then
+        log_error "No highlights.json generated"
+        return 1
+    fi
+    
+    # Convert highlights.json to manifest format
+    log_info "Converting highlights to manifest..."
+    
+    local game_name="${GAME:-gaming}"
+    local clip_num=0
+    
+    # Parse segments from JSON and create JSONL manifest
+    jq -c '.segments[]' "$json_file" | while read -r segment; do
+        ((clip_num++)) || true
+        
+        # Respect max clips limit
+        if (( clip_num > MAX_CLIPS )); then
+            break
+        fi
+        
+        local type=$(echo "$segment" | jq -r '.type')
+        local start=$(echo "$segment" | jq -r '.start')
+        local end=$(echo "$segment" | jq -r '.end')
+        local confidence=$(echo "$segment" | jq -r '.confidence')
+        
+        # Calculate duration
+        local duration=$(echo "$end - $start" | bc)
+        
+        # Clamp duration to Shorts limits
+        if (( $(echo "$duration < 10" | bc -l) )); then
+            duration=10
+            # Adjust start to include more context
+            start=$(echo "$start - 5" | bc)
+            if (( $(echo "$start < 0" | bc -l) )); then
+                start=0
+            fi
+        elif (( $(echo "$duration > 55" | bc -l) )); then
+            duration=55
+        fi
+        
+        # Format timestamp as HH:MM:SS
+        local start_ts=$(printf "%02d:%02d:%02d" $((${start%.*}/3600)) $(((${start%.*}%3600)/60)) $((${start%.*}%60)))
+        
+        # Generate title
+        local title="${game_name^} ${type} #${clip_num}"
+        
+        # Output JSONL line
+        echo "{\"input\": \"$video\", \"start\": \"$start_ts\", \"duration\": ${duration%.*}, \"title\": \"$title\", \"tags\": \"$game_name,shorts,gaming,$type\"}"
+        
+    done > "$manifest"
+    
+    local count=$(wc -l < "$manifest")
+    log_info "Generated manifest with $count highlight(s)"
+    
+    return 0
+}
+
+#------------------------------------------------------------------------------
+# Validate input and setup manifest
 #------------------------------------------------------------------------------
 if [[ ! -f "$MANIFEST" ]]; then
-    log_error "Manifest file not found: $MANIFEST"
+    log_error "Input file not found: $MANIFEST"
     exit 1
 fi
 
-TOTAL=$(wc -l < "$MANIFEST")
-log_info "Processing $TOTAL highlight(s) from $MANIFEST"
-
 mkdir -p "$OUTPUT_DIR"
+
+# Determine mode based on file extension and --auto flag
+if [[ "$AUTO_DETECT" == "true" ]]; then
+    # Auto mode: detect highlights first
+    VIDEO_INPUT="$MANIFEST"  # In auto mode, first arg is video
+    MANIFEST="${OUTPUT_DIR}/auto_manifest.jsonl"
+    
+    if ! detect_highlights "$VIDEO_INPUT" "$MANIFEST"; then
+        log_error "Failed to detect highlights"
+        exit 1
+    fi
+elif [[ "$MANIFEST" == *.mp4 || "$MANIFEST" == *.mkv || "$MANIFEST" == *.avi || "$MANIFEST" == *.mov || "$MANIFEST" == *.webm ]]; then
+    log_error "Video file provided but --auto not specified"
+    log_info "Use: $0 $MANIFEST --auto --game <game>"
+    exit 1
+fi
+
+TOTAL=$(wc -l < "$MANIFEST" | tr -d ' ')
+log_info "Processing $TOTAL highlight(s) from $MANIFEST"
 
 #------------------------------------------------------------------------------
 # Process each highlight
