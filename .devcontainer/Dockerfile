@@ -184,6 +184,12 @@ RUN sudo apt-get update && sudo apt-get install -y \
     v4l-utils \
     && sudo rm -rf /var/lib/apt/lists/*
 
+# Install yt-dlp from source (standalone binary release)
+RUN YT_DLP_VERSION=$(curl -s https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest | grep -oP '"tag_name": "\K[^"]+') \
+    && sudo curl -fsSL "https://github.com/yt-dlp/yt-dlp/releases/download/${YT_DLP_VERSION}/yt-dlp" -o /usr/local/bin/yt-dlp \
+    && sudo chmod a+rx /usr/local/bin/yt-dlp \
+    && yt-dlp --version
+
 ENV PATH=/usr/local/nginx/sbin:$PATH
 
 # ============================================
@@ -198,6 +204,7 @@ RUN sudo apt-get update && sudo apt-get install -y \
     libnvinfer-headers-dev \
     bc \
     jq \
+    sqlite3 \
     && sudo rm -rf /var/lib/apt/lists/*
 
 # Install ONNX Runtime 1.20.1 pre-built GPU binary

@@ -17,6 +17,13 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 # Database for tracking processed videos
 PROCESSED_DB="${PROJECT_DIR}/models/processed.db"
 
+# Browser data directory (matches setup-chromium.sh)
+BROWSER_DATA_DIR="${PROJECT_DIR}/.browser-data"
+COOKIES_FILE="${PROJECT_DIR}/.browser-data/cookies.txt"
+
+# Chromium binary location
+CHROMIUM_BIN="${PROJECT_DIR}/chromium/chrome-linux64/chrome"
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -164,19 +171,52 @@ cmd_download() {
     if command -v yt-dlp &>/dev/null; then
         local output_file="${output_dir}/${video_id}.mp4"
         
-        yt-dlp \
+        # Build cookie args
+        # yt-dlp can decrypt Chrome cookies if browser profile is available
+        local cookie_args=""
+        if [[ -f "$COOKIES_FILE" ]] && [[ -s "$COOKIES_FILE" ]]; then
+            cookie_args="--cookies $COOKIES_FILE"
+            log_info "Using cookies from: $COOKIES_FILE"
+        elif [[ -d "$BROWSER_DATA_DIR/Default" ]]; then
+            # Use yt-dlp's built-in Chrome cookie decryption
+            # Specify the profile directory explicitly
+            cookie_args="--cookies-from-browser chrome:$BROWSER_DATA_DIR"
+            log_info "Using browser profile: $BROWSER_DATA_DIR"
+        fi
+        
+        # Try download - for your own unlisted videos, may need authentication
+        if yt-dlp \
             --format "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best" \
             --merge-output-format mp4 \
             --output "$output_file" \
             --no-playlist \
-            --cookies-from-browser chromium \
-            "https://www.youtube.com/watch?v=${video_id}" 2>&1
+            --no-warnings \
+            $cookie_args \
+            "https://www.youtube.com/watch?v=${video_id}" 2>&1; then
+            
+            if [[ -f "$output_file" ]]; then
+                mark_processed "$video_id" "downloaded" "$output_file"
+                log_info "Downloaded: $output_file"
+                echo "$output_file"
+                return 0
+            fi
+        fi
         
-        if [[ -f "$output_file" ]]; then
-            mark_processed "$video_id" "downloaded" "$output_file"
-            log_info "Downloaded: $output_file"
-            echo "$output_file"
-            return 0
+        # Fallback: try without cookies (works for public videos)
+        log_warn "Trying without cookies..."
+        if yt-dlp \
+            --format "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best" \
+            --merge-output-format mp4 \
+            --output "$output_file" \
+            --no-playlist \
+            "https://www.youtube.com/watch?v=${video_id}" 2>&1; then
+            
+            if [[ -f "$output_file" ]]; then
+                mark_processed "$video_id" "downloaded" "$output_file"
+                log_info "Downloaded: $output_file"
+                echo "$output_file"
+                return 0
+            fi
         fi
     fi
     
@@ -292,6 +332,73 @@ cmd_reset() {
 }
 
 #------------------------------------------------------------------------------
+# Export cookies from browser profile to Netscape format
+#------------------------------------------------------------------------------
+cmd_export_cookies() {
+    log_step "Exporting cookies from browser profile..."
+    
+    local cookies_db="$BROWSER_DATA_DIR/Default/Cookies"
+    
+    if [[ ! -f "$cookies_db" ]]; then
+        log_error "Browser cookies database not found: $cookies_db"
+        log_info "Run: ./scripts/setup-chromium.sh launch"
+        log_info "Then log into YouTube and try again."
+        exit 1
+    fi
+    
+    # Check if sqlite3 is available
+    if ! command -v sqlite3 &>/dev/null; then
+        log_error "sqlite3 not found. Install with: sudo apt install sqlite3"
+        exit 1
+    fi
+    
+    # Export YouTube cookies to Netscape format
+    log_info "Extracting YouTube cookies..."
+    
+    # Create temporary copy (Chromium may have it locked)
+    local tmp_db=$(mktemp)
+    cp "$cookies_db" "$tmp_db"
+    
+    # Write Netscape cookie header
+    echo "# Netscape HTTP Cookie File" > "$COOKIES_FILE"
+    echo "# Exported by vidcom yt-fetch.sh" >> "$COOKIES_FILE"
+    echo "" >> "$COOKIES_FILE"
+    
+    # Extract cookies for youtube.com and google.com (for auth)
+    # Netscape format: domain, domain_initial_dot, path, secure, expires, name, value
+    # domain_initial_dot must be TRUE if domain starts with dot
+    sqlite3 -separator $'\t' "$tmp_db" "
+        SELECT 
+            host_key,
+            CASE WHEN host_key LIKE '.%' THEN 'TRUE' ELSE 'FALSE' END,
+            path,
+            CASE WHEN is_secure THEN 'TRUE' ELSE 'FALSE' END,
+            CAST((expires_utc / 1000000 - 11644473600) AS INTEGER),
+            name,
+            value
+        FROM cookies
+        WHERE (host_key LIKE '%youtube.com' 
+           OR host_key LIKE '%google.com'
+           OR host_key LIKE '%googlevideo.com')
+           AND value != ''
+        ORDER BY host_key, name;
+    " 2>/dev/null >> "$COOKIES_FILE" || {
+        log_error "Failed to extract cookies from database"
+        rm -f "$tmp_db"
+        exit 1
+    }
+    
+    rm -f "$tmp_db"
+    
+    local count=$(grep -c $'\t' "$COOKIES_FILE" 2>/dev/null || echo 0)
+    log_info "Exported $count cookies to: $COOKIES_FILE"
+    
+    if [[ $count -eq 0 ]]; then
+        log_warn "No cookies found. Make sure you're logged into YouTube in Chromium."
+    fi
+}
+
+#------------------------------------------------------------------------------
 # Main
 #------------------------------------------------------------------------------
 usage() {
@@ -306,17 +413,20 @@ Commands:
   playlist <playlist_id> [limit] --download  Download all from playlist
   status                          Show processed videos status
   reset <video_id>                Reset a video's processed status
+  export-cookies                  Export browser cookies for yt-dlp
 
 Examples:
   $(basename "$0") list PLxxxxxx                    # List playlist contents
   $(basename "$0") playlist PLxxxxxx 5              # Mark 5 videos as pending
   $(basename "$0") playlist PLxxxxxx 5 --download   # Download 5 videos
   $(basename "$0") download dQw4w9WgXcQ             # Download single video
+  $(basename "$0") export-cookies                   # Export YouTube cookies
   $(basename "$0") status                           # Show processing status
 
 Environment:
   Videos are tracked in: $PROCESSED_DB
   Downloads go to: $PROJECT_DIR/output/source/
+  Cookies file: $COOKIES_FILE
 EOF
 }
 
@@ -346,6 +456,9 @@ main() {
         reset)
             [[ -z "${2:-}" ]] && { log_error "Video ID required"; exit 1; }
             cmd_reset "$2"
+            ;;
+        export-cookies)
+            cmd_export_cookies
             ;;
         --help|-h|help|"")
             usage
