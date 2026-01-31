@@ -17,8 +17,6 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y \
     gnupg \
     libsecret-tools \
     nano \
-    && sed -i 's|http://archive.ubuntu.com/ubuntu|YOUR_CLOSEST_UBUNTU_MIRROR|g' /etc/apt/sources.list.d/ubuntu.sources 2>/dev/null || \
-       sed -i 's|http://archive.ubuntu.com/ubuntu|YOUR_CLOSEST_UBUNTU_MIRROR|g' /etc/apt/sources.list 2>/dev/null || true \
     && sed -i '/en_GB/s/^# //g' /etc/locale.gen \
     && locale-gen en_GB.UTF-8 \
     && update-locale LANG=en_GB.UTF-8 LC_ALL=en_GB.UTF-8 \
@@ -27,7 +25,7 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y \
 # Set locale and timezone
 ENV LANG=en_GB.UTF-8 \
     LC_ALL=en_GB.UTF-8 \
-    TZ=YOUR_TIMEZONE \
+    TZ=UTC \
     EDITOR=nano
 
 # Configure timezone
@@ -92,12 +90,13 @@ RUN export HOME=/home/vidcom && \
 ENV PATH=$NVM_DIR/versions/node/v25.4.0/bin:$PATH
 
 # Bake user-specific git config into image
-RUN git config --global user.email YOUR_GITHUB_ID+YOUR_USERNAME@users.noreply.github.com && \
-    git config --global user.name YOUR_USERNAME && \
-    git config --global init.defaultBranch main && \
-    git config --global commit.gpgsign true && \
-    git config --global user.signingkey YOUR_GPG_KEY_ID && \
-    git config --global gpg.program gpg
+RUN git config --global init.defaultBranch main
+    # Uncomment and configure for signed commits:
+    # git config --global user.email YOUR_GITHUB_ID+YOUR_USERNAME@users.noreply.github.com && \
+    # git config --global user.name YOUR_USERNAME && \
+    # git config --global commit.gpgsign true && \
+    # git config --global user.signingkey YOUR_GPG_KEY_ID && \
+    # git config --global gpg.program gpg
 
 # Build FFmpeg from master with NVENC/NVDEC + SRT support (full CUDA)
 RUN sudo apt-get update && sudo apt-get install -y \
