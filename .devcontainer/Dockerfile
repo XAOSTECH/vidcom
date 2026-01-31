@@ -76,12 +76,13 @@ WORKDIR /home/vidcom
 
 RUN touch ~/.hushlogin
 
-# Install nvm, Node.js, and Dev-Control
+# Install nvm (latest), Node.js, and Dev-Control
 ENV NVM_DIR=/home/vidcom/.config/nvm
 ENV BASH_ENV=/home/vidcom/.bashrc
 RUN export HOME=/home/vidcom && \
     mkdir -p "$NVM_DIR" && \
-    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash && \
+    NVM_LATEST=$(curl -fsSL https://api.github.com/repos/nvm-sh/nvm/releases/latest | grep -oP '"tag_name": "\K[^"]+') && \
+    curl -o- "https://raw.githubusercontent.com/nvm-sh/nvm/${NVM_LATEST}/install.sh" | bash && \
     echo 'export NVM_DIR="$HOME/.config/nvm"' >> ~/.bashrc && \
     echo '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"' >> ~/.bashrc && \
     bash -c 'source $NVM_DIR/nvm.sh && nvm install 25 && nvm alias default 25' && \
@@ -232,6 +233,15 @@ RUN echo 'prefix=/usr/local' | sudo tee /usr/local/lib/pkgconfig/onnxruntime.pc 
     && echo 'Version: 1.20.1' | sudo tee -a /usr/local/lib/pkgconfig/onnxruntime.pc \
     && echo 'Cflags: -I${includedir}' | sudo tee -a /usr/local/lib/pkgconfig/onnxruntime.pc \
     && echo 'Libs: -L${libdir} -lonnxruntime' | sudo tee -a /usr/local/lib/pkgconfig/onnxruntime.pc
+
+# Download YOLOv8n ONNX model for highlight detection (removes Python dependency)
+# This uses the official Ultralytics pre-exported model
+RUN YOLO_VERSION=$(curl -fsSL https://api.github.com/repos/ultralytics/assets/releases/latest | grep -oP '"tag_name": "\K[^"]+') && \
+    echo "Downloading YOLOv8n ONNX from ultralytics/assets ${YOLO_VERSION}..." && \
+    sudo mkdir -p /opt/models && \
+    sudo curl -fsSL "https://github.com/ultralytics/assets/releases/download/${YOLO_VERSION}/yolov8n.onnx" -o /opt/models/yolov8n.onnx && \
+    sudo chmod 644 /opt/models/yolov8n.onnx && \
+    ls -lh /opt/models/
 
 # Clean up GPG keyring created during nginx verification (interferes with host GPG agent mount)
 RUN rm -rf ~/.gnupg

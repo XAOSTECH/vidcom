@@ -1,0 +1,48 @@
+{
+  "name": "vidcom",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "remoteUser": "vidcom",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/vidcom,type=bind,consistency=cached",
+  "workspaceFolder": "/workspaces/vidcom",
+  "runArgs": [
+    "--device=/dev/dri",
+    "--device=/dev/nvidia0",
+    "--device=/dev/nvidiactl",
+    "--device=/dev/nvidia-modeset",
+    "--device=/dev/nvidia-uvm",
+    "--device=/dev/nvidia-uvm-tools"
+  ],
+  // CUSTOMIZE: Adjust mounts for your system
+  // - GPG agent socket location may vary
+  // - Docker/Podman socket path depends on your setup
+  // - GitHub CLI config mount requires 'gh auth login' on host first
+  "mounts": [
+    "source=/run/user/${localEnv:UID}/gnupg/S.gpg-agent,target=/run/user/1000/gnupg/S.gpg-agent,type=bind",
+    "source=${localEnv:HOME}/.config/gh,target=/home/vidcom/.config/gh,type=bind,consistency=cached",
+    "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind"
+  ],
+  "containerEnv": {
+    "GPG_TTY": "$(tty)",
+    "DISPLAY": "${localEnv:DISPLAY}",
+    "XDG_RUNTIME_DIR": "/run/user/1000",
+    "NVIDIA_VISIBLE_DEVICES": "all",
+    "NVIDIA_DRIVER_CAPABILITIES": "compute,video,utility",
+    // CUSTOMIZE: Set your timezone
+    "TZ": "YOUR_TIMEZONE"
+  },
+  "postCreateCommand": "git config --global --add safe.directory '*' && gpg-connect-agent updatestartuptty /bye >/dev/null 2>&1 || true",
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.cwd": "/workspaces/vidcom",
+        "git.enableSmartCommit": true,
+        "git.autofetch": true
+      },
+      "extensions": [
+        "github.copilot","github.copilot-chat"
+      ]
+    }
+  }
+}
