@@ -17,7 +17,7 @@ USER_DATA_DIR="$PROJECT_DIR/.browser-data"
 
 # Chromium for Testing (official builds from Google)
 # https://googlechromelabs.github.io/chrome-for-testing/
-CHROMIUM_VERSION="131.0.6778.87"
+CHROMIUM_VERSION="145.0.7632.26"
 CHROMIUM_PLATFORM="linux64"
 CHROMIUM_URL="https://storage.googleapis.com/chrome-for-testing-public/${CHROMIUM_VERSION}/${CHROMIUM_PLATFORM}/chrome-${CHROMIUM_PLATFORM}.zip"
 
@@ -469,6 +469,19 @@ cmd_launch() {
     
     # Create user data dir and initialize preferences
     mkdir -p "$USER_DATA_DIR"
+    
+    # Fix permissions: .config must be writable for Chrome crashpad handler
+    if [[ -d "$HOME/.config" ]]; then
+        sudo chmod 755 "$HOME/.config" 2>/dev/null || true
+        sudo chown -R "$(whoami):$(id -gn)" "$HOME/.config/google-chrome-for-testing" 2>/dev/null || true
+    fi
+    
+    # Fix ownership if Chrome was previously run as root
+    if [[ -d "$USER_DATA_DIR" ]] && [[ ! -O "$USER_DATA_DIR" ]]; then
+        log "Fixing browser data ownership..."
+        sudo chown -R $(id -u):$(id -g) "$USER_DATA_DIR"
+    fi
+    
     setup_chrome_preferences
     
     # Clear stale locks if --force or in container
@@ -496,6 +509,7 @@ cmd_launch() {
         "--user-data-dir=$USER_DATA_DIR"
         "--no-first-run"
         "--no-default-browser-check"
+        "--no-sandbox"
         "--disable-background-networking"
         "--disable-sync"
         "--disable-translate"
@@ -504,9 +518,7 @@ cmd_launch() {
         # Container-friendly: disable features that need D-Bus/dconf
         "--disable-features=PasswordManager,TranslateUI"
         "--disable-infobars"
-        # GPU/rendering flags for container without GPU drivers
-        "--disable-gpu"
-        "--disable-software-rasterizer"
+        # Container-friendly: use shared memory alternatives
         "--disable-dev-shm-usage"
         # Suppress D-Bus errors (no system bus in containers)
         "--disable-dbus"
@@ -537,13 +549,7 @@ cmd_launch() {
     log "  Profile: $USER_DATA_DIR"
     [[ -n "$url" ]] && log "  URL: $url"
     
-    # Suppress dconf/D-Bus stderr noise (redirect to /dev/null but keep stdout)
     "$chrome_path" "${args[@]}" 2>/dev/null &
-    
-    log "Chromium launched (PID: $!)"
-    log ""
-    log "TIP: Log into your YouTube/Google account in this browser."
-    log "     This profile is isolated and gitignored."
 }
 
 cmd_oauth() {
