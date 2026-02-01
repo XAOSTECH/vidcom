@@ -38,36 +38,52 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | d
     && rm -rf /var/lib/apt/lists/*
 
 # Install CUDA Toolkit 13.1
-RUN wget -q https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb -O /tmp/cuda-keyring.deb \
+RUN wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb -O /tmp/cuda-keyring.deb \
     && dpkg -i /tmp/cuda-keyring.deb \
     && rm -f /tmp/cuda-keyring.deb \
-    && apt-get update \
-    && apt-get install -y \
+    && apt-get update && apt-get install -y --no-install-recommends \
         cuda-toolkit-13-1 \
         cuda-nvcc-13-1 \
         cuda-libraries-dev-13-1 \
         cuda-cudart-dev-13-1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Set CUDA environment variables
+# Install CUDA 12.6 runtime libraries for ONNX Runtime 1.20.x compatibility
+# (ONNX Runtime GPU binary is built against CUDA 12.x, not 13.x)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        cuda-cudart-12-6 \
+        cuda-nvrtc-12-6 \
+        libcublas-12-6 \
+        libcufft-12-6 \
+        libcurand-12-6 \
+        libcusparse-12-6 \
+        libcusolver-12-6 \
+        libnvjitlink-12-6 \
+        libcudnn9-cuda-12 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set CUDA environment variables (CUDA 13 for dev, but 12.6 runtime libs available for ONNX RT)
 ENV PATH=/usr/local/cuda/bin:${PATH} \
-    LD_LIBRARY_PATH=/usr/local/cuda/lib64:${LD_LIBRARY_PATH} \
+    LD_LIBRARY_PATH=/usr/local/cuda-12.6/lib64:/usr/local/cuda/lib64:${LD_LIBRARY_PATH} \
     CUDA_HOME=/usr/local/cuda
 
-# Create user vidcom with sudo privileges
-RUN if id ubuntu &>/dev/null; then \
-        groupmod -n vidcom ubuntu && \
-        usermod -l vidcom -m -d /home/vidcom ubuntu; \
-    else \
-        useradd -m -s /bin/bash vidcom; \
-    fi && \
+# Create user vidcom with sudo privileges (rename ubuntu user which already has UID 1000)
+RUN usermod -l vidcom -d /home/vidcom -m ubuntu && \
+    groupmod -n vidcom ubuntu && \
     usermod -aG sudo vidcom && \
     echo "vidcom ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers && \
-    mkdir -p /home/vidcom/.config /home/vidcom/.cache /home/vidcom/.local/share && \
-    chown -R vidcom:vidcom /home/vidcom && \
-    chmod 755 /home/vidcom
+    mkdir -p /home/vidcom/.config /home/vidcom/.cache /home/vidcom/.local/share /home/vidcom/.gnupg && \
+    chown -R 1000:1000 /home/vidcom && \
+    chmod 755 /home/vidcom && \
+    chmod 700 /home/vidcom/.gnupg
 
 USER vidcom
+
+ENV HOME=/home/vidcom \
+    XDG_CONFIG_HOME=/home/vidcom/.config \
+    XDG_CACHE_HOME=/home/vidcom/.cache \
+    XDG_DATA_HOME=/home/vidcom/.local/share
+
 WORKDIR /home/vidcom
 
 RUN touch ~/.hushlogin
@@ -90,17 +106,18 @@ RUN export HOME=/home/vidcom && \
 ENV PATH=$NVM_DIR/versions/node/v25.4.0/bin:$PATH
 
 # Bake user-specific git config into image
+# Uncomment and configure for signed commits:
+# RUN git config --global user.email YOUR_GITHUB_ID+YOUR_USERNAME@users.noreply.github.com && \
+#     git config --global user.name YOUR_USERNAME && \
+#     git config --global commit.gpgsign true && \
+#     git config --global user.signingkey YOUR_GPG_KEY_ID && \
+#     git config --global gpg.program gpg
 RUN git config --global init.defaultBranch main
-    # Uncomment and configure for signed commits:
-    # git config --global user.email YOUR_GITHUB_ID+YOUR_USERNAME@users.noreply.github.com && \
-    # git config --global user.name YOUR_USERNAME && \
-    # git config --global commit.gpgsign true && \
-    # git config --global user.signingkey YOUR_GPG_KEY_ID && \
-    # git config --global gpg.program gpg
 
 # Build FFmpeg from master with NVENC/NVDEC + SRT support (full CUDA)
 RUN sudo apt-get update && sudo apt-get install -y \
     nasm yasm pkg-config gpg dirmngr \
+    libmd0 \
     libx264-dev libx265-dev libvpx-dev \
     libfdk-aac-dev libmp3lame-dev libopus-dev \
     libass-dev libfreetype6-dev libvorbis-dev \
@@ -174,13 +191,10 @@ RUN sudo apt-get update && sudo apt-get install -y \
     && rm -rf /tmp/nginx-* \
     && sudo ln -sf /usr/local/nginx/sbin/nginx /usr/local/bin/nginx
 
-# Install streaming utilities
-RUN sudo apt-get update && sudo apt-get install -y \
-    mediainfo \
-    imagemagick \
-    sox libsox-fmt-all \
-    v4l-utils \
-    && sudo rm -rf /var/lib/apt/lists/*
+# Install streaming utilities (split to avoid podman symlink exhaustion)
+RUN sudo apt-get update && sudo apt-get install -y mediainfo && sudo rm -rf /var/lib/apt/lists/*
+RUN sudo apt-get update && sudo apt-get install -y sox libsox-fmt-all && sudo rm -rf /var/lib/apt/lists/*
+RUN sudo apt-get update && sudo apt-get install -y v4l-utils && sudo rm -rf /var/lib/apt/lists/*
 
 # Install yt-dlp from source (standalone binary release)
 RUN YT_DLP_VERSION=$(curl -s https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest | grep -oP '"tag_name": "\K[^"]+') \
@@ -212,6 +226,8 @@ RUN ONNX_VERSION="1.20.1" \
     && sudo mv /opt/onnxruntime-linux-x64-gpu-${ONNX_VERSION} /opt/onnxruntime \
     && sudo ln -sf /opt/onnxruntime/include/* /usr/local/include/ \
     && sudo ln -sf /opt/onnxruntime/lib/libonnxruntime.so* /usr/local/lib/ \
+    && sudo ln -sf /opt/onnxruntime/lib/libonnxruntime_providers_cuda.so /usr/local/lib/ \
+    && sudo ln -sf /opt/onnxruntime/lib/libonnxruntime_providers_shared.so /usr/local/lib/ \
     && sudo ldconfig \
     && rm -f /tmp/onnxruntime.tgz
 
@@ -233,18 +249,28 @@ RUN echo 'prefix=/usr/local' | sudo tee /usr/local/lib/pkgconfig/onnxruntime.pc 
 
 # Export YOLOv8n to ONNX format (build-time only, Python removed after)
 # Uses a temporary venv to avoid polluting the system
-RUN sudo apt-get update && sudo apt-get install -y --no-install-recommends \
-        python3-pip python3-venv \
-    && python3 -m venv /tmp/yolo-export \
-    && /tmp/yolo-export/bin/pip install --quiet ultralytics onnx onnxslim onnxruntime \
-    && /tmp/yolo-export/bin/python -c "from ultralytics import YOLO; model = YOLO('yolov8n.pt'); model.export(format='onnx', imgsz=640, opset=17, simplify=True)" \
-    && sudo mkdir -p /opt/models \
-    && sudo mv yolov8n.onnx /opt/models/yolov8n.onnx \
-    && sudo chmod 644 /opt/models/yolov8n.onnx \
-    && rm -rf /tmp/yolo-export yolov8n.pt ~/.config/Ultralytics \
-    && sudo apt-get purge -y python3-pip python3-venv \
-    && sudo apt-get autoremove -y \
-    && sudo rm -rf /var/lib/apt/lists/* \
+# Skips if models already exist (e.g. from cache mount)
+RUN if [ -f /opt/models/yolov8n.onnx ]; then \
+        echo "ONNX model already exists, skipping export"; \
+    else \
+        sudo apt-get update && sudo apt-get install -y --no-install-recommends python3-pip python3-venv \
+        && python3 -m venv /tmp/yolo-export \
+        && /tmp/yolo-export/bin/pip install ultralytics onnx onnxslim onnxruntime \
+        && cd /tmp/yolo-export \
+        && if [ -f /opt/models/yolov8n.pt ]; then \
+               echo "PT model exists, using cached version"; \
+               cp /opt/models/yolov8n.pt yolov8n.pt; \
+           fi \
+        && /tmp/yolo-export/bin/python -c "from ultralytics import YOLO; model = YOLO('yolov8n.pt'); model.export(format='onnx', imgsz=640, opset=17, simplify=True)" \
+        && sudo mkdir -p /opt/models \
+        && sudo mv /tmp/yolo-export/yolov8n.onnx /opt/models/yolov8n.onnx \
+        && sudo mv /tmp/yolo-export/yolov8n.pt /opt/models/yolov8n.pt 2>/dev/null || true \
+        && sudo chmod 644 /opt/models/yolov8n.* \
+        && rm -rf /tmp/yolo-export ~/.config/Ultralytics /tmp/Ultralytics \
+        && sudo apt-get purge -y python3-pip python3-venv \
+        && sudo apt-get autoremove -y \
+        && sudo rm -rf /var/lib/apt/lists/*; \
+    fi \
     && ls -lh /opt/models/
 
 # Clean up GPG keyring created during nginx verification (interferes with host GPG agent mount)
