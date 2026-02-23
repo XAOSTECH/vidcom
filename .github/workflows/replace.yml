@@ -1,0 +1,177 @@
+name: Text Replacement
+
+on:
+  workflow_dispatch:
+    inputs:
+      search_text:
+        description: 'Text to search for'
+        required: true
+        type: string
+      replace_text:
+        description: 'Text to replace with'
+        required: true
+        type: string
+      exclude_paths:
+        description: 'Comma-separated paths to exclude (e.g., ".github, node_modules")'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  replace:
+    name: Replace Text
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate App Token
+        id: app_token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets['XB_AI'] }}
+          private-key: ${{ secrets['XB_PK'] }}
+
+      - name: Setup bot identity
+        uses: XAOSTECH/dev-control/.github/actions/identity@main
+        with:
+          gpg-private-key: ${{ secrets['XB_GK'] }}
+          gpg-passphrase: ${{ secrets['XB_GP'] }}
+          user-token: ${{ secrets['XB_UT'] }}
+          bot-name: ${{ vars.BOT_NAME || 'xaos-bot' }}
+
+      - name: Validate inputs
+        run: |
+          if [[ -z "${{ inputs.search_text }}" ]]; then
+            echo "::error::Search text cannot be empty"
+            exit 1
+          fi
+          
+          if [[ -z "${{ inputs.replace_text }}" ]]; then
+            echo "::error::Replace text cannot be empty"
+            exit 1
+          fi
+          
+          echo "✅ Inputs validated"
+          echo "🔍 Search: ${{ inputs.search_text }}"
+          echo "🔄 Replace: ${{ inputs.replace_text }}"
+          echo "🚫 Exclude: ${{ inputs.exclude_paths }}"
+
+      - name: Perform text replacement
+        id: replace
+        run: |
+          SEARCH_TEXT="${{ inputs.search_text }}"
+          REPLACE_TEXT="${{ inputs.replace_text }}"
+          EXCLUDE_PATHS="${{ inputs.exclude_paths }}"
+          
+          # Build find exclusion arguments
+          FIND_EXCLUDES="-path ./.git -prune"
+          if [[ -n "$EXCLUDE_PATHS" ]]; then
+            IFS=',' read -ra EXCLUDE_ARRAY <<< "$EXCLUDE_PATHS"
+            for exclude in "${EXCLUDE_ARRAY[@]}"; do
+              exclude=$(echo "$exclude" | xargs)  # Trim whitespace
+              if [[ -n "$exclude" && "$exclude" != ".git" ]]; then
+                FIND_EXCLUDES="$FIND_EXCLUDES -o -path ./${exclude} -prune -o -path ./${exclude}/* -prune"
+              fi
+            done
+          fi
+          
+          # Find all text files (excluding binary files and specified paths)
+          FILES=$(eval "find . $FIND_EXCLUDES -o -type f -print" | \
+            grep -vE '\.(png|jpg|jpeg|gif|ico|svg|pdf|zip|tar|gz|bz2|xz|exe|dll|so|dylib|a|o)$' | \
+            sort)
+          
+          TOTAL_FILES=$(echo "$FILES" | wc -l)
+          CHANGED_FILES=0
+          TOTAL_REPLACEMENTS=0
+          
+          echo "## Text Replacement Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "🔍 **Search:** \`$SEARCH_TEXT\`" >> $GITHUB_STEP_SUMMARY
+          echo "🔄 **Replace:** \`$REPLACE_TEXT\`" >> $GITHUB_STEP_SUMMARY
+          echo "🚫 **Excluded:** \`$EXCLUDE_PATHS\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📊 Scanning $TOTAL_FILES files..." | tee -a $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Process each file
+          while IFS= read -r file; do
+            [[ -z "$file" ]] && continue
+            [[ ! -f "$file" ]] && continue
+            
+            # Check if file contains search text
+            if grep -qF "$SEARCH_TEXT" "$file" 2>/dev/null; then
+              # Count occurrences in this file
+              COUNT=$(grep -oF "$SEARCH_TEXT" "$file" | wc -l)
+              
+              # Perform replacement using sed
+              sed -i "s|$(echo "$SEARCH_TEXT" | sed 's/[\/&]/\\&/g')|$(echo "$REPLACE_TEXT" | sed 's/[\/&]/\\&/g')|g" "$file"
+              
+              echo "  ✓ $file ($COUNT replacement(s))"
+              echo "- \`$file\` - $COUNT occurrence(s)" >> $GITHUB_STEP_SUMMARY
+              
+              CHANGED_FILES=$((CHANGED_FILES + 1))
+              TOTAL_REPLACEMENTS=$((TOTAL_REPLACEMENTS + COUNT))
+            fi
+          done <<< "$FILES"
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [[ $CHANGED_FILES -gt 0 ]]; then
+            echo "✅ Replaced $TOTAL_REPLACEMENTS occurrence(s) in $CHANGED_FILES file(s)"
+            echo "### Summary" >> $GITHUB_STEP_SUMMARY
+            echo "✅ **$TOTAL_REPLACEMENTS** replacement(s) in **$CHANGED_FILES** file(s)" >> $GITHUB_STEP_SUMMARY
+            echo "needs_pr=true" >> $GITHUB_OUTPUT
+          else
+            echo "ℹ️ No occurrences found"
+            echo "ℹ️ **No occurrences found**" >> $GITHUB_STEP_SUMMARY
+            echo "needs_pr=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Setup bot identity (if replacement needed)
+        id: import_gpg
+        if: steps.replace.outputs.needs_pr == 'true'
+        uses: XAOSTECH/dev-control/.github/actions/identity@main
+        with:
+          gpg-private-key: ${{ secrets['XB_GK'] }}
+          gpg-passphrase: ${{ secrets['XB_GP'] }}
+          user-token: ${{ secrets['XB_UT'] }}
+          bot-name: ${{ vars.BOT_NAME || 'xaos-bot' }}
+
+      - name: Create Pull Request
+        if: steps.replace.outputs.needs_pr == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        run: |
+          git add -A
+          
+          if git diff --cached --quiet; then
+            echo "ℹ️ No changes to commit"
+            exit 0
+          fi
+          
+          BRANCH_NAME="replace/$(date +%Y%m%d-%H%M%S)"
+          git checkout -b "$BRANCH_NAME"
+          
+          SEARCH_TEXT="${{ inputs.search_text }}"
+          REPLACE_TEXT="${{ inputs.replace_text }}"
+          
+          git commit -m "chore: replace text across repository" \
+            -m "Search: $SEARCH_TEXT" \
+            -m "Replace: $REPLACE_TEXT"
+          
+          git push origin "$BRANCH_NAME"
+          
+          gh pr create \
+            --title "chore: Replace text - automated update" \
+            --body "## Automated Text Replacement\n\n**Search:** \`$SEARCH_TEXT\`  \n**Replace:** \`$REPLACE_TEXT\`  \n**Excluded paths:** \`${{ inputs.exclude_paths }}\`\n\nThis PR was automatically generated by the [Text Replacement workflow](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}).\n\nPlease review the changes carefully before merging." \
+            --base "${{ github.ref_name }}" \
+            --head "$BRANCH_NAME"
+          
+          echo "✅ Pull request created successfully"

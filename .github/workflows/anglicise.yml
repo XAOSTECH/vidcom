@@ -1,30 +1,8 @@
 name: British English Spelling Check
 
 on:
-  push:
-    branches:
-      - main
-      - master
-      - develop
-    paths:
-      - '**.md'
-      - '**.sh'
-      - '**.yaml'
-      - '**.yml'
-      - '**.txt'
-      - 'docs/**'
-  pull_request:
-    branches:
-      - main
-      - master
-      - develop
-    paths:
-      - '**.md'
-      - '**.sh'
-      - '**.yaml'
-      - '**.yml'
-      - '**.txt'
-      - 'docs/**'
+  schedule:
+    - cron: '0 0 1 * *'
   workflow_dispatch:
 
 permissions:
@@ -41,6 +19,21 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Generate App Token
+        id: app_token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets['XB_AI'] }}
+          private-key: ${{ secrets['XB_PK'] }}
+
+      - name: Setup bot identity
+        uses: XAOSTECH/dev-control/.github/actions/identity@main
+        with:
+          gpg-private-key: ${{ secrets['XB_GK'] }}
+          gpg-passphrase: ${{ secrets['XB_GP'] }}
+          user-token: ${{ secrets['XB_UT'] }}
+          bot-name: ${{ vars.BOT_NAME || 'xaos-bot' }}
 
       - name: Check for American spellings
         id: check
@@ -335,13 +328,13 @@ jobs:
               [[ -z "$file" ]] && continue
               
               # Find matches, excluding:
-              # - File paths and URLs
+              # - URLs and shields.io badge URL parameters (&color=, ?color=)
               # - CLI flags with values (--align center, --foreground color)
               # - Gum/TUI library options
               # - Variable references ($color, ${color})
-              # - Assignment patterns (color=, COLOR=)
+              # - Assignment patterns (color=, COLOR=) including query params
               MATCHES=$(grep -inw "$american" "$file" 2>/dev/null | \
-                grep -vE '(/[a-zA-Z0-9_.-]+\.[a-z]{1,4}|https?://|file://|--[a-z-]+ (center|color|gray)|\$\{?(color|center|gray)|\b(color|center|gray)[_A-Z]*=|gum |\\$)' || true)
+                grep -vE '(https?://|file://|[?&](color|center|gray)=[a-zA-Z0-9]+|"Authorization": "Bearer|types:[[:space:]]*\[[^]]+\]|--[a-z-]+ (center|color|gray)|\$\{?(color|center|gray)|}|\b(color|center|gray)[_A-Z]*=|gum |\\$)' || true)
               
               if [[ -n "$MATCHES" ]]; then
                 FILES_TO_FIX["$file"]=1
@@ -415,19 +408,21 @@ jobs:
             # Process line by line to preserve case and skip certain patterns
             while IFS= read -r line || [[ -n "$line" ]]; do
               # Skip lines containing:
-              # - Filenames with extensions (colors.sh, config.yaml)
               # - HTML attributes (align="center", style="color:")
               # - CLI flags with values (--align center, --foreground color)
               # - Gum/TUI commands and options
               # - Variable references ($color, ${color}, COLOR_VAR)
               # - Assignment patterns (color=, center=)
               # - Escaped line continuations (trailing backslash)
-              if echo "$line" | grep -qE '([a-zA-Z0-9_-]+\.[a-zA-Z]{1,4}\b|=["'\''](center|color)|--[a-z-]+ (center|color|gray)|--color|--center|\$\{?(color|center|gray)|\b(COLOR|CENTER|GRAY)[_A-Z]*|gum |\\$)'; then
+              # NOTE: filename exclusion is handled in the perl regex via (?!\.)
+              # so that 'colors' in a comment is fixed even if 'colours.sh' appears on the same line
+              if echo "$line" | grep -qE "(=[\"'](center|color)|types:[[:space:]]*\[[^]]+\]|--[a-z-]+ (center|color|gray)|--color|--center|\\$\\{?(color|center|gray)|\\b(COLOR|CENTER|GRAY)[_A-Z]*=|gum |\\\\$)"; then
                 echo "$line"
               else
                 # Apply case-preserving replacement using perl
+                # (?!\.) prevents replacing when the word is directly followed by a dot (e.g. colors.sh)
                 echo "$line" | perl -pe "
-                  s/\\b${american}\\b/
+                  s/\\b${american}\\b(?!\\.)/
                     my \$match = \$&;
                     my \$repl = '${british}';
                     if (\$match =~ \/^[A-Z]+\$\/) {
@@ -456,8 +451,8 @@ jobs:
               [[ -z "$file" ]] && continue
               
               # Check if file contains the word (case-insensitive, whole word)
-              # Exclude lines containing filenames, HTML attributes, CLI flags, or code patterns
-              if grep -inw "$american" "$file" 2>/dev/null | grep -qvE '([a-zA-Z0-9_-]+\.[a-zA-Z]{1,4}\b|=["'\''](center|color)|--[a-z-]+ (center|color|gray)|--color|--center|\$\{?(color|center|gray)|\b(COLOR|CENTER|GRAY)[_A-Z]*|gum |\\$)'; then
+              # Exclude lines where the match is inside a code/CLI pattern (filename exclusion handled by perl (?!\.))
+              if grep -inw "$american" "$file" 2>/dev/null | grep -qvE "(https?://|[?&](color|center|gray)=[a-zA-Z0-9]+|\"Authorization\": \"Bearer|types:[[:space:]]*\[[^]]+\]|=[\"'](center|color)|--[a-z-]+ (center|color|gray)|--color|--center|\\$\\{?(color|center|gray)|\\b(COLOR|CENTER|GRAY)[_A-Z]*|gum |\\\\$)"; then
                 case_preserve_replace "$file" "$american" "$british"
                 echo "  ✓ Fixed in: $file"
                 FIXED_COUNT=$((FIXED_COUNT + 1))
@@ -467,27 +462,45 @@ jobs:
           
           echo "✅ Applied fixes to $FIXED_COUNT file(s)"
 
+      - name: Setup bot identity (if fixes needed)
+        id: import_gpg
+        if: steps.check.outputs.needs_fix == 'true'
+        uses: XAOSTECH/dev-control/.github/actions/identity@main
+        with:
+          gpg-private-key: ${{ secrets['XB_GK'] }}
+          gpg-passphrase: ${{ secrets['XB_GP'] }}
+          user-token: ${{ secrets['XB_UT'] }}
+          bot-name: ${{ vars.BOT_NAME || 'xaos-bot' }}
+
+      - name: Ensure automerge label exists
+        if: steps.check.outputs.needs_fix == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        run: |
+          # Create 'automerge' label if it doesn't exist
+          gh label create automerge \
+            --description "Automatically merge this PR" \
+            --color "3BEF67" \
+            2>/dev/null || true
+          echo "✅ Automerge label ensured"
+
       - name: Create Pull Request
         if: steps.check.outputs.needs_fix == 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
         run: |
-          # Configure git
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          
           # Stage changes first to check if there are any
           git add -A
           
           # Check if there are actual changes to commit
           if git diff --cached --quiet; then
-            echo "⚠️ No actual changes to commit (files may have been excluded or already correct)"
-            echo "ℹ️ The check step found potential issues but the fix step couldn't apply changes."
+            echo "✅ No changes needed - all spellings already conform to British English"
+            echo "ℹ️ The check step found potential issues but the fix step determined they were false positives."
             echo "   This can happen when matches are in excluded patterns (URLs, CLI flags, etc.)"
             exit 0
           fi
           
-          # Create branch
+          # Create branch only if we have changes
           BRANCH_NAME="anglicise/$(date +%Y%m%d-%H%M%S)"
           git checkout -b "$BRANCH_NAME"
           
@@ -500,28 +513,10 @@ jobs:
           # Create PR
           gh pr create \
             --title "chore: Convert American spellings to British English" \
-            --body "## Automated British English Conversion
-            
-            This PR automatically converts American spellings to British English equivalents.
-            
-            ### Patterns converted:
-            - \`-ize\` → \`-ise\` (organize → organise)
-            - \`-ization\` → \`-isation\` (organization → organisation)
-            - \`-or\` → \`-our\` (color → colour)
-            - \`-er\` → \`-re\` (center → centre)
-            - \`-og\` → \`-ogue\` (catalog → catalogue)
-            - \`-ense\` → \`-ence\` (defense → defence)
-            - \`-l-\` → \`-ll-\` (canceled → cancelled)
-            - Other common differences (gray → grey, aging → ageing, etc.)
-            
-            ### Review notes:
-            - All replacements use case-insensitive whole-word matching
-            - File paths, URLs, and code identifiers are preserved
-            - Please review the changes to ensure no false positives
-            
-            ---
+            --body "## Automated British English Conversion\n\nThis PR automatically converts American spellings to British English equivalents.\n\n### Patterns converted:\n- \`-ize\` → \`-ise\` (organize → organise)\n- \`-ization\` → \`-isation\` (organization → organisation)\n- \`-or\` → \`-our\` (color → colour)\n- \`-er\` → \`-re\` (center → centre)\n- \`-og\` → \`-ogue\` (catalog → catalogue)\n- \`-ense\` → \`-ence\` (defense → defence)\n- \`-l-\` → \`-ll-\` (canceled → cancelled)\n- Other common differences (gray → grey, aging → ageing, etc.)\n\n### Review notes:\n- All replacements use case-insensitive whole-word matching\n- File paths, URLs, and code identifiers are preserved\n- Please review the changes to ensure no false positives\n\n---
             *Generated by [British English Spelling Check workflow](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})*" \
             --base "${{ github.ref_name }}" \
-            --head "$BRANCH_NAME"
+            --head "$BRANCH_NAME" \
+            --label "automerge"
           
           echo "✅ Pull request created successfully"

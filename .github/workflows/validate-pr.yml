@@ -1,0 +1,83 @@
+name: Validate PR for Automerge
+
+# UNPRIVILEGED workflow - runs in untrusted PR context
+# This workflow validates PR author/labels WITHOUT checkout or secrets
+# Follows GitHub Security Lab recommendation for pull_request_target security
+
+on:
+  pull_request:
+    types: [opened, reopened, labeled, synchronize]
+
+permissions:
+  pull-requests: read
+  contents: read
+
+jobs:
+  validate:
+    name: Validate PR eligibility
+    runs-on: ubuntu-latest
+    outputs:
+      should_merge: ${{ steps.check.outputs.should_merge }}
+    
+    steps:
+      - name: Validate PR author and labels
+        id: check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const prNumber = context.payload.pull_request.number;
+            const author = context.payload.pull_request.user.login;
+            const labels = context.payload.pull_request.labels.map(l => l.name);
+            
+            // Validation logic (same as automerge guard)
+            const isXaosBot = (login) => /xaos.*\[bot\]/i.test(login);
+            const isDependabot = author === 'dependabot[bot]';
+            const isRepoOwner = author === owner;
+            const isCloudflare = author === 'cloudflare-workers-and-pages[bot]';
+            const isPages = author === 'github-pages[bot]' || author === 'github-pages-deploy-action[bot]';
+            const isGitHubActions = author === 'github-actions[bot]';
+            const hasAutomergeLabel = labels.includes('automerge');
+            const isTrustedAuthor = isDependabot || isRepoOwner || isCloudflare || isPages || isGitHubActions;
+            
+            let shouldMerge = false;
+            let reason = '';
+            
+            if (isXaosBot(author)) {
+              shouldMerge = true;
+              reason = `xaos bot author: ${author}`;
+            } else if (hasAutomergeLabel && isTrustedAuthor) {
+              shouldMerge = true;
+              reason = `automerge label + trusted author: ${author}`;
+            } else {
+              reason = `requires xaos bot OR (automerge label + trusted author) - hasLabel=${hasAutomergeLabel}, isTrusted=${isTrustedAuthor}, author=${author}`;
+            }
+            
+            core.setOutput('should_merge', String(shouldMerge));
+            core.setOutput('pr_number', String(prNumber));
+            core.setOutput('reason', reason);
+            
+            if (shouldMerge) {
+              core.info(`✅ PR #${prNumber} validated: ${reason}`);
+            } else {
+              core.info(`❌ PR #${prNumber} rejected: ${reason}`);
+            }
+
+      - name: Save validation result
+        if: steps.check.outputs.should_merge == 'true'
+        run: |
+          mkdir -p ./pr-validation
+          echo "${{ steps.check.outputs.pr_number }}" > ./pr-validation/NUMBER
+          echo "${{ steps.check.outputs.reason }}" > ./pr-validation/REASON
+          echo "${{ github.event.pull_request.head.sha }}" > ./pr-validation/HEAD_SHA
+          echo "${{ github.event.pull_request.base.ref }}" > ./pr-validation/BASE_REF
+          echo "${{ github.event.pull_request.head.label }}" > ./pr-validation/HEAD_LABEL
+          echo "${{ github.event.pull_request.title }}" > ./pr-validation/TITLE
+
+      - name: Upload validation artifact
+        if: steps.check.outputs.should_merge == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-validation-${{ steps.check.outputs.pr_number }}
+          path: pr-validation/
+          retention-days: 1

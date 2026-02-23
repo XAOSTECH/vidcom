@@ -1,8 +1,8 @@
 blank_issues_enabled: true
 contact_links:
   - name: 💬 Discussions
-    url: https://github.com/xaoscience/vidcom/discussions
+    url: https://github.com/XAOSTECH/vidcom/discussions
     about: Ask questions and discuss ideas
   - name: 📖 Documentation
-    url: https://github.com/xaoscience/vidcom#readme
+    url: https://github.com/XAOSTECH/vidcom#readme
     about: Read the documentation

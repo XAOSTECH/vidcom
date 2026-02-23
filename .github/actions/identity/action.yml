@@ -1,0 +1,136 @@
+name: Bot Setup
+description: >
+  Register the machine user GPG key to their GitHub profile, import and configure it
+  for signed commits/tags, and set global git identity.
+  All inputs are optional — steps degrade gracefully when secrets are absent.
+
+inputs:
+  gpg-private-key:
+    description: Armored GPG private key (secrets.BOT_GPG_PRIVATE_KEY)
+    required: false
+    default: ''
+  gpg-passphrase:
+    description: GPG key passphrase (secrets.BOT_GPG_PASSPHRASE)
+    required: false
+    default: ''
+  user-token:
+    description: >
+      Classic PAT with write:gpg_key scope (secrets.BOT_USER_TOKEN).
+      Required to register the public key to the machine user's GitHub profile —
+      installation tokens cannot call POST /user/gpg_keys.
+    required: false
+    default: ''
+  bot-name:
+    description: Git display name for commits and tags (vars.BOT_NAME)
+    required: false
+    default: 'xaos-bot'
+  bot-email:
+    description: Bot GitHub noreply email (e.g., 12345+bot@users.noreply.github.com)
+    required: false
+    default: '262248812+xaos-bot@users.noreply.github.com'
+
+outputs:
+  gpg-outcome:
+    description: Result of GPG key import — success, skipped, or failure
+    value: ${{ steps.import.outputs.outcome }}
+
+runs:
+  using: composite
+  steps:
+    - name: Register GPG key to bot GitHub profile
+      shell: bash
+      env:
+        GPG_PRIVATE_KEY: ${{ inputs.gpg-private-key }}
+        GPG_PASSPHRASE: ${{ inputs.gpg-passphrase }}
+        USER_TOKEN: ${{ inputs.user-token }}
+        BOT_NAME: ${{ inputs.bot-name }}
+        BOT_EMAIL: ${{ inputs.bot-email }}
+      run: |
+        [[ -z "$GPG_PRIVATE_KEY" ]] && exit 0
+        echo "$GPG_PRIVATE_KEY" | gpg --batch --import --quiet 2>/dev/null || true
+        FINGERPRINT=$(gpg --batch --with-colons --list-secret-keys 2>/dev/null | grep '^fpr' | head -1 | cut -d: -f10)
+        [[ -z "$FINGERPRINT" ]] && exit 0
+        # Add machine user noreply email as a UID for GitHub signature verification
+        if [[ -n "$GPG_PASSPHRASE" ]]; then
+          if ! gpg --list-keys 2>/dev/null | grep -qF "$BOT_EMAIL"; then
+            printf '%s' "$GPG_PASSPHRASE" | gpg --batch --pinentry-mode loopback --passphrase-fd 0 \
+              --quick-add-uid "$FINGERPRINT" "${BOT_NAME} <${BOT_EMAIL}>" 2>/dev/null || true
+          fi
+        fi
+        KEY_ID=$(gpg --list-secret-keys --keyid-format=long 2>/dev/null | grep -oE '[0-9A-F]{16}' | head -1)
+        [[ -z "$KEY_ID" ]] && exit 0
+        GPG_PUBLIC_KEY=$(gpg --armor --export "$KEY_ID" 2>/dev/null || true)
+        [[ -z "$GPG_PUBLIC_KEY" ]] && exit 0
+        if [[ -z "$USER_TOKEN" ]]; then
+          echo "⚠️ user-token not set — skipping GPG key registration to GitHub profile"
+          echo "ℹ️ Add a classic PAT (write:gpg_key scope) to enable 'Verified' tags"
+          exit 0
+        fi
+        ALREADY=$(GH_TOKEN="$USER_TOKEN" gh api /user/gpg_keys \
+          --jq ".[] | select(.key_id == \"$KEY_ID\") | .id" 2>/dev/null || true)
+        if [[ "$ALREADY" =~ ^[0-9]+$ ]]; then
+          echo "✅ GPG key already registered (id: $ALREADY) — skipping"
+          exit 0
+        fi
+        RESULT=$(GH_TOKEN="$USER_TOKEN" gh api /user/gpg_keys \
+          --method POST -f armored_public_key="$GPG_PUBLIC_KEY" --jq '.id' 2>/dev/null) || RESULT=""
+        if [[ "$RESULT" =~ ^[0-9]+$ ]]; then
+          echo "✅ GPG public key registered (id: $RESULT)"
+        else
+          echo "⚠️ GPG key registration failed: $RESULT"
+          echo "ℹ️ Ensure user-token is a classic PAT with write:gpg_key scope"
+        fi
+
+    - name: Import GPG key and configure signing
+      id: import
+      shell: bash
+      env:
+        GPG_PRIVATE_KEY: ${{ inputs.gpg-private-key }}
+        GPG_PASSPHRASE: ${{ inputs.gpg-passphrase }}
+        BOT_NAME: ${{ inputs.bot-name }}
+        BOT_EMAIL: ${{ inputs.bot-email }}
+      run: |
+        if [[ -z "$GPG_PRIVATE_KEY" ]]; then
+          echo "⚠️ GPG key not provided — skipping import, tags will be unsigned"
+          echo "outcome=skipped" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        mkdir -p ~/.gnupg && chmod 700 ~/.gnupg
+        printf 'default-cache-ttl 21600\nmax-cache-ttl 31536000\nallow-preset-passphrase\n' > ~/.gnupg/gpg-agent.conf
+        gpg-connect-agent 'RELOADAGENT' /bye 2>/dev/null || gpgconf --kill gpg-agent 2>/dev/null || true
+        echo "$GPG_PRIVATE_KEY" | gpg --batch --import --quiet 2>/dev/null || true
+        FINGERPRINT=$(gpg --batch --with-colons --list-secret-keys 2>/dev/null | grep '^fpr' | head -1 | cut -d: -f10)
+        if [[ -z "$FINGERPRINT" ]]; then
+          echo "❌ Failed to import GPG key"
+          echo "outcome=failure" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        KEYGRIPS=$(gpg --batch --with-colons --with-keygrip --list-secret-keys "$FINGERPRINT" 2>/dev/null | grep '^grp' | cut -d: -f10)
+        HEX_PASSPHRASE=$(printf '%s' "$GPG_PASSPHRASE" | xxd -p -u | tr -d '\n')
+        while IFS= read -r KEYGRIP; do
+          [[ -z "$KEYGRIP" ]] && continue
+          gpg-connect-agent "PRESET_PASSPHRASE $KEYGRIP -1 $HEX_PASSPHRASE" /bye 2>/dev/null || true
+        done <<< "$KEYGRIPS"
+        if ! gpg --list-keys 2>/dev/null | grep -qF "$BOT_EMAIL"; then
+          gpg --batch --quick-add-uid "$FINGERPRINT" "${BOT_NAME} <${BOT_EMAIL}>" 2>/dev/null || true
+        fi
+        KEY_ID=$(gpg --list-secret-keys --keyid-format=long 2>/dev/null | grep -oE '[0-9A-F]{16}' | head -1)
+        if [[ -z "$KEY_ID" ]]; then
+          echo "outcome=failure" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        git config --global user.signingkey "$KEY_ID"
+        git config --global commit.gpgsign true
+        git config --global tag.gpgsign true
+        echo "✅ GPG key imported and configured for signing (key: $KEY_ID)"
+        echo "outcome=success" >> "$GITHUB_OUTPUT"
+
+    - name: Configure git identity
+      shell: bash
+      env:
+        BOT_NAME: ${{ inputs.bot-name }}
+        BOT_EMAIL: ${{ inputs.bot-email }}
+      run: |
+        git config --global user.name "${BOT_NAME}"
+        git config --global user.email "${BOT_EMAIL}"
+        echo "✅ Git identity configured: ${BOT_NAME} <${BOT_EMAIL}>"

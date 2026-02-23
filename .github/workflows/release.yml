@@ -2,9 +2,9 @@
 # Release Workflow Template (release.yml)
 # ============================================================================
 #
-# ORIGIN: https://github.com/xaoscience/dev-control
+# ORIGIN: https://github.com/XAOSTECH/dev-control
 # This workflow template is part of the dev-control toolkit.
-# See: https://github.com/xaoscience/dev-control/blob/main/workflows-templates/
+# See: https://github.com/XAOSTECH/dev-control/blob/main/workflows-templates/
 #
 # ============================================================================
 #
@@ -42,12 +42,16 @@
 # RECOMMENDED WORKFLOW:
 #
 #   1. Create feature branch: git checkout -b feat/my-feature
-#   2. Make changes and test locally: ./tests/run_tests.sh
-#   3. Create PR and merge to main
-#   4. Update CHANGELOG.md with version section
-#   5. Commit changelog: git commit -m "chore: update CHANGELOG for v1.0.0"
-#   6. Create tag: git tag -a v1.0.0 -m "Release v1.0.0"
-#   7. Push tag: git push origin v1.0.0
+#   2. Make changes and test locally
+#   3. Create PR and merge to main (use conventional commits: feat/fix/chore/docs)
+#   4. Trigger via Actions → Release → Run workflow
+#      CHANGELOG.md is auto-generated from commits and committed by the bot
+#   OR create a signed tag locally and push to trigger the push path:
+#      git tag -s v1.0.0 -m "Release v1.0.0" && git push origin v1.0.0
+#
+# TO SIGN AN EXISTING TAG RETROACTIVELY:
+#   git tag -s -f v1.0.0 -m "Release v1.0.0"  # Force recreate with signature
+#   git push --force origin v1.0.0             # Force push to replace
 #
 # OR use manual dispatch for testing/special releases:
 #   - Actions → Release → Run workflow → Enter version
@@ -55,10 +59,30 @@
 # BEST PRACTICES:
 #   - Always update CHANGELOG.md before releasing
 #   - Use semantic versioning (v1.0.0, not v1.0 or v01.00.00)
-#   - Create annotated tags: git tag -a v1.0.0 -m "message"
+#   - Create signed tags: git tag -s v1.0.0 -m "message" (or -a for unsigned)
 #   - Wait for at least 3 commits since last release
 #   - Run full test suite locally before tagging
 #   - Review commits to ensure quality with: git log v0.9.0..main --oneline
+#
+# TAG SIGNING (RECOMMENDED):
+#   Create signed tags locally for better security and authenticity:
+#   
+#   New tags:
+#     git tag -s v1.0.0 -m "Release v1.0.0"
+#     git push origin v1.0.0
+#   
+#   Retroactively sign existing tag:
+#     git tag -s -f v1.0.0 -m "Release v1.0.0"  # Force recreate with signature
+#     git push --force origin v1.0.0             # Force push to replace unsigned tag
+#   
+#   Workflow automation (optional):
+#   If you want GitHub Actions to sign tags during manual dispatch, add these secrets:
+#   1. Generate GPG key: gpg --full-generate-key
+#   2. Export private key: gpg --armor --export-secret-keys YOUR_EMAIL > private.key
+#   3. Add to GitHub Secrets:
+#      - GPG_PRIVATE_KEY: contents of private.key
+#      - GPG_PASSPHRASE: your GPG passphrase
+#   4. The workflow will automatically sign tags when these secrets exist
 #
 # ============================================================================
 
@@ -71,8 +95,8 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to release (e.g., 1.0.0 without v prefix)'
-        required: true
+        description: 'Version (leave blank to autoincrement, use current to rerelease)'
+        required: false
         type: string
       prerelease:
         description: 'Mark as pre-release'
@@ -93,6 +117,12 @@ on:
 permissions:
   contents: write
 
+# One release job per tag at a time; if a second run starts (e.g. re-trigger from tag push)
+# it waits rather than racing. Both paths are idempotent so the second run is a no-op.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   GUM_VERSION: '0.17.0'
 
@@ -101,21 +131,58 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
+      - name: Generate App Token
+        id: app_token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets['XB_AI'] }}
+          private-key: ${{ secrets['XB_PK'] }}
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0  # Full history for changelog generation
+          # Use the app token so actions/checkout installs its credential helper
+          # with the app token — this carries the 'workflows' installation permission
+          # for all subsequent git pushes, including workflow file references.
+          token: ${{ steps.app_token.outputs.token }}
+
+      - name: Setup bot identity
+        uses: XAOSTECH/dev-control/.github/actions/identity@main
+        with:
+          gpg-private-key: ${{ secrets['XB_GK'] }}
+          gpg-passphrase: ${{ secrets['XB_GP'] }}
+          user-token: ${{ secrets['XB_UT'] }}
+          bot-name: ${{ vars.BOT_NAME || 'xaos-bot' }}
 
       - name: Determine version
         id: version
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
         run: |
           if [[ "${{ github.event_name }}" == "push" ]]; then
             # Extract version from tag (remove 'v' prefix)
             VERSION="${GITHUB_REF#refs/tags/v}"
             TAG_NAME="${GITHUB_REF#refs/tags/}"
           else
-            # Manual dispatch - use input
+            # Manual dispatch - use input or auto-detect next patch
             VERSION="${{ github.event.inputs.version }}"
+            VERSION="${VERSION#v}"  # strip leading 'v' if present
+            if [[ -z "$VERSION" ]]; then
+              LATEST=$(gh api repos/${{ github.repository }}/releases/latest --jq '.tag_name' 2>/dev/null || \
+                       git tag --list 'v*' --sort=-version:refname | grep -vE 'latest|alpha|beta|rc' | head -1)
+              LATEST=${LATEST#v}
+              if [[ "$LATEST" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
+                MAJOR=${BASH_REMATCH[1]}
+                MINOR=${BASH_REMATCH[2]}
+                PATCH=${BASH_REMATCH[3]}
+                VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
+                echo "🔢 Auto-detected next version: ${VERSION} (from latest: v${LATEST})"
+              else
+                echo "❌ Could not determine latest version to auto-increment"
+                exit 1
+              fi
+            fi
             TAG_NAME="v${VERSION}"
           fi
           
@@ -134,61 +201,166 @@ jobs:
           fi
           echo "✅ Version format valid: $VERSION"
 
-      - name: Validate commit count
+      - name: Check if release already published
+        id: check_release
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        run: |
+          TAG_NAME="${{ steps.version.outputs.tag_name }}"
+          RERELEASE="false"
+
+          if gh release view "$TAG_NAME" &>/dev/null; then
+            if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+              # Only allow re-release if this is the latest published release
+              LATEST_TAG=$(gh api "repos/${{ github.repository }}/releases/latest" --jq '.tag_name' 2>/dev/null || echo "")
+              if [[ "$LATEST_TAG" == "$TAG_NAME" ]]; then
+                echo "🔄 Re-release: $TAG_NAME is latest — cleaning up existing release, version tag, and latest tag"
+                gh release delete "$TAG_NAME" --yes 2>/dev/null || true
+                git push origin ":refs/tags/${TAG_NAME}" 2>/dev/null || true
+                git tag -d "$TAG_NAME" 2>/dev/null || true
+                git push origin :refs/tags/latest 2>/dev/null || true
+                git tag -d latest 2>/dev/null || true
+                echo "✅ Cleaned up — will rebuild and republish"
+                RERELEASE="true"
+                echo "exists=false" >> $GITHUB_OUTPUT
+              else
+                echo "⚠️ Release $TAG_NAME exists but is not the latest (latest: $LATEST_TAG)"
+                echo "ℹ️ Only the latest release can be re-released via manual dispatch"
+                echo "exists=true" >> $GITHUB_OUTPUT
+              fi
+            else
+              echo "⏭️ Release $TAG_NAME already exists — skipping build (push trigger)"
+              echo "exists=true" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "🆕 Release $TAG_NAME not yet published — proceeding"
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+          echo "rerelease=${RERELEASE}" >> $GITHUB_OUTPUT
+
+      - name: Gather commit history
+        id: commits
+        if: steps.check_release.outputs.exists != 'true'
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          TAG_NAME="${{ steps.version.outputs.tag_name }}"
-          
-          # Get previous tag (if any)
-          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-          
+
+          # Previous release tag — excludes the version being released (doesn't exist yet)
+          PREV_TAG=$(git tag -l 'v*' --sort=-version:refname | grep -v "^v${VERSION}$" | head -1 || echo "")
+
           if [[ -n "$PREV_TAG" ]]; then
             COMMIT_COUNT=$(git log "${PREV_TAG}..HEAD" --oneline | wc -l)
             echo "📊 Commits since ${PREV_TAG}: ${COMMIT_COUNT}"
-            
-            # Minimum 2 commits for release (1 for changelog, 1+ for actual changes)
+            # Minimum 2 commits for release (encourages meaningful batching of changes)
             if [[ $COMMIT_COUNT -lt 2 ]]; then
               echo "⚠️ Warning: Only ${COMMIT_COUNT} commit(s) since last release"
               echo "ℹ️ Consider waiting for more changes before releasing"
               echo "ℹ️ Current practice: aim for 3+ commits per release"
-              # Don't fail - allow manual override for hotfixes
             fi
-            
             git log "${PREV_TAG}..HEAD" --oneline
+            git log "${PREV_TAG}..HEAD" --pretty=format:"%s" > .commits-subjects.txt
           else
-            echo "📊 Initial release - no previous tags"
+            echo "📊 Initial release"
             COMMIT_COUNT=$(git log --oneline | wc -l)
-            echo "📊 Total commits in repository: ${COMMIT_COUNT}"
+            echo "📊 Total commits: ${COMMIT_COUNT}"
+            git log --pretty=format:"%s" -20 > .commits-subjects.txt
           fi
 
-      - name: Validate CHANGELOG.md
+          echo "prev_tag=${PREV_TAG}" >> $GITHUB_OUTPUT
+
+      - name: Update CHANGELOG.md
+        if: steps.check_release.outputs.exists != 'true'
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          
-          if [[ ! -f "CHANGELOG.md" ]]; then
-            echo "⚠️ Warning: CHANGELOG.md not found"
-            echo "ℹ️ Consider adding CHANGELOG.md for better release documentation"
-          else
-            # Check if version appears in CHANGELOG
-            if grep -q "## \[${VERSION}\]" CHANGELOG.md 2>/dev/null || \
-               grep -q "## ${VERSION}" CHANGELOG.md 2>/dev/null; then
-              echo "✅ CHANGELOG.md updated for version ${VERSION}"
-              echo ""
-              echo "📝 Changelog entry:"
-              grep -A 20 "## \[${VERSION}\]" CHANGELOG.md 2>/dev/null || \
-              grep -A 20 "## ${VERSION}" CHANGELOG.md
+          RERELEASE="${{ steps.check_release.outputs.rerelease }}"
+          TODAY=$(date +%Y-%m-%d)
+
+          # Build grouped commit categories from .commits-subjects.txt
+          ADDED="" FIXED="" CHANGED="" DOCS=""
+          while IFS= read -r line; do
+            [[ -z "$line" ]] && continue
+            msg="${line#*: }"
+            case "$line" in
+              feat:*|feat\(*) ADDED="${ADDED}\n- ${msg}" ;;
+              fix:*|fix\(*) FIXED="${FIXED}\n- ${msg}" ;;
+              docs:*|doc\(*) DOCS="${DOCS}\n- ${msg}" ;;
+              *) CHANGED="${CHANGED}\n- ${line}" ;;
+            esac
+          done < .commits-subjects.txt
+
+          # Determine heading and insertion mode
+          if [[ "$RERELEASE" == "true" ]]; then
+            ENTRY_LINE=$(grep -n "^## \[${VERSION}\]\|^## ${VERSION}" CHANGELOG.md 2>/dev/null | head -1 | cut -d: -f1)
+            ENTRY_DATE=$(sed -n "${ENTRY_LINE}p" CHANGELOG.md 2>/dev/null | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}' | head -1)
+            if [[ -n "$ENTRY_LINE" && "$ENTRY_DATE" == "$TODAY" ]]; then
+              HEADING="## [${VERSION}] - ${TODAY}"
+              MODE="overwrite"
+              echo "♻️ Same-day re-release: overwriting CHANGELOG section for v${VERSION}"
             else
-              echo "⚠️ Warning: Version ${VERSION} not found in CHANGELOG.md"
-              echo "ℹ️ Consider adding a changelog entry for this release"
-              echo ""
-              echo "Expected format:"
-              echo "## [${VERSION}] - $(date +%Y-%m-%d)"
-              echo "### Added"
-              echo "- Feature 1"
-              echo "### Fixed"
-              echo "- Fix 1"
+              HEADING="## [${VERSION}] - ${TODAY} (re-release)"
+              MODE="prepend"
+              echo "🔄 Re-release on new day: prepending CHANGELOG section for v${VERSION}"
+            fi
+          else
+            # Normal release: skip if version already documented
+            if grep -q "^## \[${VERSION}\]" CHANGELOG.md 2>/dev/null || \
+               grep -q "^## ${VERSION}" CHANGELOG.md 2>/dev/null; then
+              echo "✅ CHANGELOG.md already contains v${VERSION} — skipping"
+              exit 0
+            fi
+            HEADING="## [${VERSION}] - ${TODAY}"
+            MODE="prepend"
+          fi
+
+          # Build the new entry
+          {
+            echo "$HEADING"
+            [[ -n "$ADDED" ]]   && printf "\n### Added%b\n"         "$ADDED"
+            [[ -n "$FIXED" ]]   && printf "\n### Fixed%b\n"         "$FIXED"
+            [[ -n "$CHANGED" ]] && printf "\n### Changed%b\n"       "$CHANGED"
+            [[ -n "$DOCS" ]]    && printf "\n### Documentation%b\n" "$DOCS"
+          } > /tmp/new_entry.md
+
+          if [[ "$MODE" == "overwrite" ]]; then
+            # Replace the existing section: everything before it + new entry + everything from next ## on
+            NEXT_SECTION=$(tail -n +$((ENTRY_LINE + 1)) CHANGELOG.md | grep -n "^## " | head -1 | cut -d: -f1)
+            head -n $((ENTRY_LINE - 1)) CHANGELOG.md > /tmp/cl_head.txt
+            if [[ -n "$NEXT_SECTION" ]]; then
+              tail -n +$((ENTRY_LINE + NEXT_SECTION - 1)) CHANGELOG.md > /tmp/cl_tail.txt
+            else
+              echo "" > /tmp/cl_tail.txt
+            fi
+            { cat /tmp/cl_head.txt; echo ""; cat /tmp/new_entry.md; echo ""; cat /tmp/cl_tail.txt; } > CHANGELOG.md
+          else
+            # Insert before first existing ## entry (or append if file is new)
+            FIRST_ENTRY=$(grep -n "^## " CHANGELOG.md 2>/dev/null | head -1 | cut -d: -f1)
+            if [[ -n "$FIRST_ENTRY" ]]; then
+              head -n $((FIRST_ENTRY - 1)) CHANGELOG.md > /tmp/cl_head.txt
+              tail -n +${FIRST_ENTRY} CHANGELOG.md      > /tmp/cl_tail.txt
+              { cat /tmp/cl_head.txt; echo ""; cat /tmp/new_entry.md; echo ""; cat /tmp/cl_tail.txt; } > CHANGELOG.md
+            else
+              { echo ""; cat /tmp/new_entry.md; echo ""; } >> CHANGELOG.md
             fi
           fi
+
+          COMMIT_MSG="chore: update CHANGELOG for v${VERSION}"
+          [[ "$RERELEASE" == "true" ]] && COMMIT_MSG="chore: update CHANGELOG for v${VERSION} (re-release)"
+          # Collapse any consecutive blank lines down to one
+          cat -s CHANGELOG.md > /tmp/cl_normalized.md && mv /tmp/cl_normalized.md CHANGELOG.md
+          git add CHANGELOG.md
+          git commit -m "$COMMIT_MSG"
+          git push
+          echo "✅ CHANGELOG.md updated for v${VERSION}"
+
+      - name: Setup bot identity (for signing)
+        id: import_gpg
+        if: github.event_name == 'workflow_dispatch'
+        uses: XAOSTECH/dev-control/.github/actions/identity@main
+        with:
+          gpg-private-key: ${{ secrets['XB_GK'] }}
+          gpg-passphrase: ${{ secrets['XB_GP'] }}
+          user-token: ${{ secrets['XB_UT'] }}
+          bot-name: ${{ vars.BOT_NAME || 'xaos-bot' }}
 
       - name: Create tag (manual dispatch only)
         if: github.event_name == 'workflow_dispatch'
@@ -199,14 +371,22 @@ jobs:
           if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
             echo "⚠️ Tag $TAG_NAME already exists, skipping tag creation"
           else
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git tag -a "$TAG_NAME" -m "Release $TAG_NAME"
-            git push origin "$TAG_NAME"
-            echo "✅ Created and pushed tag: $TAG_NAME"
+            # Create tag (signed if GPG available, annotated otherwise)
+            if [[ "${{ steps.import_gpg.outcome }}" == "success" ]]; then
+              git tag -s "$TAG_NAME" -m "Release $TAG_NAME"
+              echo "✅ Created signed tag: $TAG_NAME"
+            else
+              git tag -a "$TAG_NAME" -m "Release $TAG_NAME"
+              echo "ℹ️ Created unsigned tag: $TAG_NAME (add GPG_PRIVATE_KEY secret for signed tags)"
+            fi
+            
+            # Push via GITHUB_TOKEN so this doesn't re-trigger push:tags:v* (PAT pushes would)
+            git push "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" "$TAG_NAME"
+            echo "✅ Pushed tag: $TAG_NAME"
           fi
 
       - name: Update package version in config
+        if: steps.check_release.outputs.exists != 'true'
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           
@@ -243,6 +423,7 @@ jobs:
           fi
 
       - name: Install Gum
+        if: steps.check_release.outputs.exists != 'true'
         run: |
           curl -fsSL "https://github.com/charmbracelet/gum/releases/download/v${GUM_VERSION}/gum_${GUM_VERSION}_Linux_x86_64.tar.gz" \
             | tar xz --strip-components=1 -C /tmp "gum_${GUM_VERSION}_Linux_x86_64/gum"
@@ -250,7 +431,13 @@ jobs:
           echo "✅ Installed Gum v${GUM_VERSION}"
 
       - name: Build full tarball
+        if: steps.check_release.outputs.exists != 'true'
         run: |
+          if [[ ! -f "scripts/packaging.sh" ]]; then
+            echo "⚠️ No packaging.sh found - skipping tarball build"
+            echo "build_skipped=true" >> $GITHUB_ENV
+            exit 0
+          fi
           chmod +x scripts/packaging.sh scripts/lib/*.sh 2>/dev/null || true
           bash scripts/packaging.sh --tarball --verbose
           echo "✅ Full tarball built successfully"
@@ -295,13 +482,21 @@ jobs:
       # ========================================================================
 
       - name: List build artifacts
+        if: steps.check_release.outputs.exists != 'true'
         run: |
           VERSION="${{ steps.version.outputs.version }}"
+          
+          if [[ ! -d "dist" ]]; then
+            echo "⚠️ No dist/ directory - no tarballs were built"
+            echo "tarball_count=0" >> $GITHUB_ENV
+            exit 0
+          fi
+          
           echo "📦 Build artifacts:"
-          ls -la dist/
+          ls -la dist/ || true
           
           # Get main tarball info (first .tar.gz that's not a sub-package)
-          TARBALL=$(ls dist/*.tar.gz 2>/dev/null | head -1)
+          TARBALL=$(ls dist/*.tar.gz 2>/dev/null | head -1 || echo "")
           if [[ -n "$TARBALL" ]]; then
             echo "tarball_path=${TARBALL}" >> $GITHUB_ENV
             echo "tarball_name=$(basename "$TARBALL")" >> $GITHUB_ENV
@@ -314,19 +509,20 @@ jobs:
           fi
           
           # Count all tarballs for summary
-          TARBALL_COUNT=$(ls dist/*.tar.gz 2>/dev/null | wc -l)
+          TARBALL_COUNT=$(ls dist/*.tar.gz 2>/dev/null | wc -l || echo "0")
           echo "tarball_count=${TARBALL_COUNT}" >> $GITHUB_ENV
 
       - name: Generate release notes
         id: release_notes
+        if: steps.check_release.outputs.exists != 'true'
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           TAG_NAME="${{ steps.version.outputs.tag_name }}"
           
-          # Get previous tag
-          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-          
-          # Generate changelog
+          # Previous version tag — sourced from 'Gather commit history' step
+          PREV_TAG="${{ steps.commits.outputs.prev_tag }}"
+
+          # Generate release notes
           NOTES_FILE=$(mktemp)
           
           cat > "$NOTES_FILE" << EOF
@@ -337,14 +533,16 @@ jobs:
           if [[ -n "$PREV_TAG" ]]; then
             echo "### Commits since ${PREV_TAG}" >> "$NOTES_FILE"
             echo "" >> "$NOTES_FILE"
-            git log "${PREV_TAG}..HEAD" --pretty=format:"- %s (%h)" >> "$NOTES_FILE"
+            git log "${PREV_TAG}..${TAG_NAME}" --pretty=format:"- %s (%h)" >> "$NOTES_FILE"
           else
             echo "### Initial Release" >> "$NOTES_FILE"
             echo "" >> "$NOTES_FILE"
             git log --pretty=format:"- %s (%h)" -10 >> "$NOTES_FILE"
           fi
           
-          cat >> "$NOTES_FILE" << EOF
+          # Add installation instructions only if tarball exists
+          if [[ -n "${tarball_name:-}" && -n "${tarball_sha256:-}" ]]; then
+            cat >> "$NOTES_FILE" << EOF
           
           ## Installation
           
@@ -358,13 +556,35 @@ jobs:
           | File | SHA256 |
           |------|--------|
           | ${tarball_name} | \`${tarball_sha256}\` |
+          EOF
+          else
+            # No custom tarball - show git installation
+            cat >> "$NOTES_FILE" << EOF
+          
+          ## Installation
+          
+          ### From Source
+          \`\`\`bash
+          git clone https://github.com/$GITHUB_REPOSITORY.git
+          cd $(basename $GITHUB_REPOSITORY)
+          git checkout ${TAG_NAME}
+          \`\`\`
+          
+          ### Download Release Archive
+          \`\`\`bash
+          curl -fsSL https://github.com/$GITHUB_REPOSITORY/archive/refs/tags/${TAG_NAME}.tar.gz | tar xz
+          \`\`\`
+          EOF
+          fi
+          
+          cat >> "$NOTES_FILE" << EOF
           
           ---
           
           **Full Changelog**: https://github.com/$GITHUB_REPOSITORY/compare/${PREV_TAG}...${TAG_NAME}
           
           ---
-          *Release workflow powered by [dev-control](https://github.com/xaoscience/dev-control)*
+          *Release workflow powered by [dev-control](https://github.com/XAOSTECH/dev-control)*
           EOF
           
           # Output for next step
@@ -374,29 +594,102 @@ jobs:
           cat "$NOTES_FILE"
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.version.outputs.tag_name }}
-          name: "Release ${{ steps.version.outputs.tag_name }}"
-          body_path: ${{ steps.release_notes.outputs.notes_file }}
-          draft: ${{ github.event.inputs.draft || false }}
-          prerelease: ${{ github.event.inputs.prerelease || false }}
-          files: |
-            dist/*.tar.gz
-            dist/*.sha256
-          fail_on_unmatched_files: false
-          generate_release_notes: false
-
-      - name: Update 'latest' tag
+        if: steps.check_release.outputs.exists != 'true'
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
         run: |
           TAG_NAME="${{ steps.version.outputs.tag_name }}"
+          VERSION="${{ steps.version.outputs.version }}"
+          NOTES_FILE="${{ steps.release_notes.outputs.notes_file }}"
           
+          # Build file list (may be empty if no tarb alls)
+          FILES=$(find dist/ -name "*.tar.gz" -o -name "*.sha256" 2>/dev/null | tr '\n' ' ' || echo "")
+          
+          # Create release (idempotent — skip if already exists)
+          if gh release view "$TAG_NAME" &>/dev/null; then
+            echo "✅ Release $TAG_NAME already exists— skipping creation"
+          else
+            if [[ -n "$FILES" ]]; then
+              gh release create "$TAG_NAME" \
+                --title "Release $TAG_NAME" \
+                --notes-file "$NOTES_FILE" \
+                ${{ github.event.inputs.draft == 'true' && '--draft' || '' }} \
+                ${{ github.event.inputs.prerelease == 'true' && '--prerelease' || '' }} \
+                $FILES
+            else
+              # Release without attachments (notes only)
+              gh release create "$TAG_NAME" \
+                --title "Release $TAG_NAME" \
+                --notes-file "$NOTES_FILE" \
+                ${{ github.event.inputs.draft == 'true' && '--draft' || '' }} \
+                ${{ github.event.inputs.prerelease == 'true' && '--prerelease' || '' }}
+            fi
+            echo "✅ Release created: $TAG_NAME"
+          fi
+
+      - name: Add source archive checksums
+        if: steps.check_release.outputs.exists != 'true'
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        run: |
+          TAG_NAME="${{ steps.version.outputs.tag_name }}"
+          VERSION="${{ steps.version.outputs.version }}"
+          
+          # Only add checksums if no custom tarball was built
+          if [[ -z "${tarball_name:-}" ]]; then
+            echo "📦 Calculating SHA256 for GitHub-generated source archives..."
+            
+            # Download and checksum the archives
+            TAR_URL="https://github.com/$GITHUB_REPOSITORY/archive/refs/tags/${TAG_NAME}.tar.gz"
+            ZIP_URL="https://github.com/$GITHUB_REPOSITORY/archive/refs/tags/${TAG_NAME}.zip"
+            
+            TAR_SHA=$(curl -fsSL "$TAR_URL" | sha256sum | awk '{print $1}')
+            ZIP_SHA=$(curl -fsSL "$ZIP_URL" | sha256sum | awk '{print $1}')
+            
+            echo "🔐 Source archive SHA256:"
+            echo "  tar.gz: $TAR_SHA"
+            echo "  zip: $ZIP_SHA"
+            
+            # Get current release notes and append checksums
+            CURRENT_NOTES=$(gh release view "$TAG_NAME" --json body --jq '.body')
+            
+            # Update release notes with checksums table
+            printf -v NEW_NOTES "%s\n\n## Checksums\n\n| File | SHA256 |\n|------|--------|\n| Source code (tar.gz) | \`%s\` |\n| Source code (zip) | \`%s\` |\n" \
+              "$CURRENT_NOTES" "$TAR_SHA" "$ZIP_SHA"
+            
+            gh release edit "$TAG_NAME" --notes "$NEW_NOTES"
+            echo "✅ Updated release notes with source archive checksums"
+          else
+            echo "⏭️ Custom tarball exists - source archive checksums not needed"
+          fi
+
+      - name: Update 'latest' tag
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        run: |
+          TAG_NAME="${{ steps.version.outputs.tag_name }}"
+
+          # Skip if 'latest' already points to this tag's commit (idempotent)
+          LATEST_COMMIT=$(git rev-parse refs/tags/latest^{} 2>/dev/null || echo "")
+          TARGET_COMMIT=$(git rev-parse "${TAG_NAME}^{}" 2>/dev/null || echo "")
+          if [[ -n "$LATEST_COMMIT" && "$LATEST_COMMIT" == "$TARGET_COMMIT" ]]; then
+            echo "✅ 'latest' already points to ${TAG_NAME} — skipping"
+            exit 0
+          fi
+
           # Delete existing 'latest' tag (local and remote)
           git tag -d latest 2>/dev/null || true
           git push origin :refs/tags/latest 2>/dev/null || true
           
-          # Create new 'latest' tag pointing to this release
-          git tag latest "$TAG_NAME"
+          # Create new 'latest' tag pointing to the commit this release tag resolves to
+          # Use ^{} to dereference the version tag to its commit (avoids a nested tag)
+          if [[ "${{ steps.import_gpg.outcome }}" == "success" ]]; then
+            git tag -s -m "Latest release: ${TAG_NAME}" latest "${TAG_NAME}^{}"
+            echo "✅ Created signed 'latest' tag pointing to ${TAG_NAME}"
+          else
+            git tag -a -m "Latest release: ${TAG_NAME}" latest "${TAG_NAME}^{}"
+            echo "ℹ️ Created unsigned 'latest' tag pointing to ${TAG_NAME} (add GPG secret for signed tags)"
+          fi
           git push origin latest
           
           echo "✅ Updated 'latest' tag to point to ${TAG_NAME}"
@@ -405,6 +698,7 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           TAG_NAME="${{ steps.version.outputs.tag_name }}"
+          TARBALL_COUNT="${tarball_count:-0}"
           
           echo "## 🎉 Release Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -412,11 +706,13 @@ jobs:
           echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
           echo "| Version | ${VERSION} |" >> $GITHUB_STEP_SUMMARY
           echo "| Tag | ${TAG_NAME} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Artifacts | ${tarball_count} tarball(s) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Artifacts | ${TARBALL_COUNT} tarball(s) |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Links" >> $GITHUB_STEP_SUMMARY
           echo "- [Release](https://github.com/$GITHUB_REPOSITORY/releases/tag/${TAG_NAME})" >> $GITHUB_STEP_SUMMARY
-          echo "- [Download](https://github.com/$GITHUB_REPOSITORY/releases/download/${TAG_NAME}/${tarball_name})" >> $GITHUB_STEP_SUMMARY
+          if [[ -n "${tarball_name:-}" ]]; then
+            echo "- [Download](https://github.com/$GITHUB_REPOSITORY/releases/download/${TAG_NAME}/${tarball_name})" >> $GITHUB_STEP_SUMMARY
+          fi
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "---" >> $GITHUB_STEP_SUMMARY
-          echo "*Workflow template from [dev-control](https://github.com/xaoscience/dev-control)*" >> $GITHUB_STEP_SUMMARY
+          echo "*Workflow template from [dev-control](https://github.com/XAOSTECH/dev-control)*" >> $GITHUB_STEP_SUMMARY

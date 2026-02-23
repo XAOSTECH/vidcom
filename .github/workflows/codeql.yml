@@ -1,0 +1,85 @@
+name: CodeQL Advanced Security
+
+on:
+  pull_request:
+    branches:
+      - main
+      - master
+      - develop
+  schedule:
+    # Run daily at 2 AM UTC (avoids rate limits on high-commit days)
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          # Auto-detect languages present in repo (no hardcoding)
+          # Supports: JavaScript, Python, Go, Java, C/C++, C#, Ruby, Swift
+          queries: security-and-quality
+          config: |
+            paths-ignore:
+              - node_modules
+              - vendor
+              - '.git'
+              - 'vendor/bundle'
+              - '.venv'
+              - '__pycache__'
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          # Upload results after analysis completes
+          upload: true
+
+  # Security summary and reporting
+  security-summary:
+    name: Security Report
+    runs-on: ubuntu-latest
+    needs: [analyze]
+    if: always()
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Generate security summary
+        run: |
+          echo "## 🔒 CodeQL Security Analysis Complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Analysis Coverage:" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Auto-detected languages**: JavaScript, Python, Go, Java, C++, C#, Ruby, Swift" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Query suite**: Extended (security-and-quality)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Schedule**: Push, PR, daily at 2 AM UTC" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Concurrency**: Cancels older scans on new push" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Complementary Security:" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Shell scripts: bash-lint-advanced workflow (ShellCheck)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Dockerfile: GitHub Advanced Security scanning" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Next Steps:" >> "$GITHUB_STEP_SUMMARY"
+          echo "1. Check the [Security tab](../../security/code-scanning?tab=alert) for results" >> "$GITHUB_STEP_SUMMARY"
+          echo "2. Review any alerts in detail" >> "$GITHUB_STEP_SUMMARY"
+          echo "3. Address discovered vulnerabilities" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "[View CodeQL Documentation](https://codeql.github.com/docs/)" >> "$GITHUB_STEP_SUMMARY"
