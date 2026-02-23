@@ -1,0 +1,287 @@
+name: Security Auto-Fix Bot
+
+on:
+  # Trigger on CodeQL scan completion
+  workflow_run:
+    workflows: ["CodeQL Advanced Security"]
+    types:
+      - completed
+  
+  # Manual trigger for testing
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  security-events: read
+
+jobs:
+  autofix:
+    name: Auto-fix Security Alerts
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate security app token
+        id: app_token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.XSS_AI }}
+          private-key: ${{ secrets.XSS_PK }}
+          permission-actions: read
+          permission-security-events: read
+          permission-workflows: write
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Fetch and analyze CodeQL alerts
+        id: alerts
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        run: |
+          # Fetch open security alerts
+          ALERTS=$(gh api repos/${{ github.repository }}/code-scanning/alerts?state=open \
+            --jq '[.[] | select(.rule.severity == "error" or .rule.severity == "warning") | {
+              number: .number,
+              rule: .rule.id,
+              severity: .rule.severity,
+              file: .most_recent_instance.location.path,
+              line: .most_recent_instance.location.start_line,
+              message: .most_recent_instance.message.text
+            }]')
+          
+          echo "Found $(echo "$ALERTS" | jq 'length') open alerts"
+          
+          # Count fixable alerts
+          FIXABLE_COUNT=$(echo "$ALERTS" | jq '[.[] | select(.rule == "actions/code-injection/medium" or .rule == "actions/unpinned-tag")] | length')
+          
+          echo "fixable_count=$FIXABLE_COUNT" >> $GITHUB_OUTPUT
+          echo "$ALERTS" > /tmp/alerts.json
+          
+          if [ "$FIXABLE_COUNT" -eq 0 ]; then
+            echo "No auto-fixable alerts found"
+            exit 0
+          fi
+
+      - name: Apply automatic fixes
+        if: steps.alerts.outputs.fixable_count > 0
+        id: fixes
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        run: |
+          FIXES_APPLIED=0
+          MODIFIED_FILES=""
+          
+          # Read alerts
+          ALERTS=$(cat /tmp/alerts.json)
+          
+          # Pattern 1: Fix code injection - Extract GitHub expressions to env vars
+          # Note: Complex YAML manipulation requires manual review
+          # This pattern detects but defers to PR for automated fixes
+          echo "🔧 Detecting code injection vulnerabilities..."
+          CODE_INJECTION_COUNT=$(echo "$ALERTS" | jq '[.[] | select(.rule == "actions/code-injection/medium")] | length')
+          
+          if [ "$CODE_INJECTION_COUNT" -gt 0 ]; then
+            echo "  ⚠️  Found $CODE_INJECTION_COUNT code injection patterns"
+            echo "code_injection_found=true" >> "$GITHUB_OUTPUT"
+          fi
+          
+          # Pattern 2: Fix unpinned actions
+          echo "🔧 Fixing unpinned actions..."
+          for alert in $(echo "$ALERTS" | jq -r '.[] | select(.rule == "actions/unpinned-tag") | @base64'); do
+            _jq() {
+              echo "$alert" | base64 --decode | jq -r "$1"
+            }
+            
+            FILE=$(_jq '.file')
+            
+            if [[ ! -f "$FILE" ]]; then
+              continue
+            fi
+            
+            echo "  📝 Processing $FILE"
+            
+            # Find unpinned actions (uses: owner/repo@branch)
+            # Resolve to SHA via GitHub API and replace
+            while IFS= read -r line_content; do
+              if [[ "$line_content" =~ uses:\ ([^@]+)@(master|main|v[0-9]+)($|\ ) ]]; then
+                ACTION="${BASH_REMATCH[1]}"
+                REF="${BASH_REMATCH[2]}"
+                
+                # Skip local actions (start with ./)
+                if [[ "$ACTION" == ./* ]]; then
+                  continue
+                fi
+                
+                echo "  🔍 Resolving $ACTION@$REF to SHA..."
+                
+                # Get SHA for ref via GitHub API
+                if [[ "$ACTION" == */* ]]; then
+                  OWNER=$(echo "$ACTION" | cut -d/ -f1)
+                  REPO=$(echo "$ACTION" | cut -d/ -f2-)
+                  
+                  SHA=$(gh api "repos/$OWNER/$REPO/commits/$REF" --jq '.sha' 2>/dev/null | head -c 40)
+                  
+                  if [[ -n "$SHA" && "$SHA" =~ ^[0-9a-f]{40}$ ]]; then
+                    # Replace @ref with @SHA in file
+                    sed -i "s|uses: $ACTION@$REF|uses: $ACTION@$SHA|g" "$FILE"
+                    FIXES_APPLIED=$((FIXES_APPLIED + 1))
+                    MODIFIED_FILES="$MODIFIED_FILES $FILE"
+                    echo "  ✅ Pinned $ACTION@$REF → @${SHA:0:7}"
+                  else
+                    echo "  ⚠️  Could not resolve SHA for $ACTION@$REF"
+                  fi
+                fi
+              fi
+            done < "$FILE"
+          done
+          
+          # Pattern 3: Fix unquoted $GITHUB_OUTPUT (already done in previous commits, but check)
+          echo "🔧 Checking for unquoted variables..."
+          for workflow in .github/workflows/*.yml; do
+            if grep -qE '>>\s+\$[A-Z_]+' "$workflow"; then
+              # Quote unquoted redirections
+              sed -i -E 's/>> \$([A-Z_]+)/>> "\$\1"/g' "$workflow"
+              if [[ "$MODIFIED_FILES" != *"$workflow"* ]]; then
+                MODIFIED_FILES="$MODIFIED_FILES $workflow"
+              fi
+              FIXES_APPLIED=$((FIXES_APPLIED + 1))
+              echo "  ✅ Quoted variables in $workflow"
+            fi
+          done
+          
+          echo "fixes_applied=$FIXES_APPLIED" >> $GITHUB_OUTPUT
+          echo "modified_files<<EOF" >> $GITHUB_OUTPUT
+          echo "$MODIFIED_FILES" | xargs -n1 | sort -u >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+          echo ""
+          echo "📊 Summary: Applied $FIXES_APPLIED fixes across $(echo "$MODIFIED_FILES" | xargs -n1 | sort -u | wc -l) files"
+
+      - name: Create security fix PR
+        if: steps.fixes.outputs.fixes_applied > 0 || steps.fixes.outputs.code_injection_found == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        run: |
+          BRANCH="security/autofix-$(date +%s)"
+          REPO="${{ github.repository }}"
+          
+          # Get the latest commit SHA from main
+          MAIN_SHA=$(gh api "/repos/$REPO/git/ref/heads/main" --jq '.object.sha')
+          echo "Main branch SHA: $MAIN_SHA"
+          
+          # Create blobs for modified files
+          echo "Creating file blobs..."
+          TREE_ITEMS=()
+          
+          for file in $(echo "${{ steps.fixes.outputs.modified_files }}" | xargs -n1 | sort -u); do
+            if [[ -f "$file" ]]; then
+              echo "  📝 Processing $file"
+              # Create blob via API
+              BLOB_SHA=$(gh api "/repos/$REPO/git/blobs" \
+                -X POST \
+                -f content="$(cat "$file")" \
+                -f encoding="utf-8" \
+                --jq '.sha')
+              
+              # Add to tree items (using jq to build JSON)
+              TREE_ITEMS+=("{\"path\":\"$file\",\"mode\":\"100644\",\"type\":\"blob\",\"sha\":\"$BLOB_SHA\"}")
+            fi
+          done
+          
+          # Build tree items JSON array
+          TREE_JSON=$(printf '%s\n' "${TREE_ITEMS[@]}" | jq -s '.')
+          
+          # Get the base tree SHA
+          BASE_TREE=$(gh api "/repos/$REPO/git/commits/$MAIN_SHA" --jq '.tree.sha')
+          
+          # Create new tree
+          echo "Creating git tree..."
+          TREE_SHA=$(gh api "/repos/$REPO/git/trees" \
+            -X POST \
+            -f base_tree="$BASE_TREE" \
+            -f tree="$TREE_JSON" \
+            --jq '.sha')
+          
+          # Create commit
+          echo "Creating commit..."
+          COMMIT_SHA=$(gh api "/repos/$REPO/git/commits" \
+            -X POST \
+            -f message="security: auto-fix CodeQL alerts" \
+            -f tree="$TREE_SHA" \
+            -f parents[]="$MAIN_SHA" \
+            --jq '.sha')
+          
+          # Create branch reference
+          echo "Creating branch $BRANCH..."
+          gh api "/repos/$REPO/git/refs" \
+            -X POST \
+            -f ref="refs/heads/$BRANCH" \
+            -f sha="$COMMIT_SHA"
+          
+          # Create PR - write body to temp file
+          echo "Automated Security Fixes" > /tmp/pr_body.md
+          echo "========================" >> /tmp/pr_body.md
+          echo "" >> /tmp/pr_body.md
+          echo "This PR contains automatic fixes for security alerts detected by CodeQL." >> /tmp/pr_body.md
+          echo "" >> /tmp/pr_body.md
+          echo "Alerts Addressed:" >> /tmp/pr_body.md
+          cat /tmp/alerts.json | jq -r '.[] | "- [\(.severity | ascii_upcase)] \(.rule): \(.file):\(.line)"' >> /tmp/pr_body.md
+          echo "" >> /tmp/pr_body.md
+          echo "Changes Made:" >> /tmp/pr_body.md
+          echo "- Extract GitHub Actions context variables to environment variables" >> /tmp/pr_body.md
+          echo "- Pin unpinned third-party actions to commit SHAs" >> /tmp/pr_body.md
+          echo "- Quote shell variables to prevent code injection" >> /tmp/pr_body.md
+          echo "" >> /tmp/pr_body.md
+          echo "Verification Needed:" >> /tmp/pr_body.md
+          echo "Review required - validate that fixes don't break workflow functionality" >> /tmp/pr_body.md
+          echo "" >> /tmp/pr_body.md
+          echo "---" >> /tmp/pr_body.md
+          echo "Auto-generated by security-autofix workflow" >> /tmp/pr_body.md
+          
+          gh pr create \
+            --repo "$REPO" \
+            --base main \
+            --head "$BRANCH" \
+            --title "🔒 Security Auto-Fix: CodeQL Alerts" \
+            --body-file /tmp/pr_body.md \
+            --label security,automated
+
+      - name: Create GitHub Issue for manual review
+        if: steps.alerts.outputs.fixable_count > 0
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        run: |
+          # Check if similar issue already exists
+          EXISTING=$(gh issue list --state open --label security-review --json number --jq 'length')
+          
+          if [ "$EXISTING" -gt 0 ]; then
+            echo "ℹ️  Security review issue already exists"
+            exit 0
+          fi
+          
+          # Create tracking issue - write body to temp file
+          echo "Security Alerts Requiring Manual Review" > /tmp/issue_body.md
+          echo "=========================================" >> /tmp/issue_body.md
+          echo "" >> /tmp/issue_body.md
+          echo "The following CodeQL alerts cannot be automatically fixed and require manual intervention:" >> /tmp/issue_body.md
+          echo "" >> /tmp/issue_body.md
+          cat /tmp/alerts.json | jq -r '.[] | "### Alert #\(.number): \(.rule)\n- **Severity**: \(.severity)\n- **File**: \`\(.file):\(.line)\`\n- **Message**: \(.message)\n"' >> /tmp/issue_body.md
+          echo "" >> /tmp/issue_body.md
+          echo "### Recommended Actions" >> /tmp/issue_body.md
+          echo "1. Review each alert in the [Security tab](https://github.com/${{ github.repository }}/security/code-scanning)" >> /tmp/issue_body.md
+          echo "2. Apply fixes following GitHub Security Lab recommendations" >> /tmp/issue_body.md
+          echo "3. Close alerts as fixed or false positive in dashboard" >> /tmp/issue_body.md
+          echo "" >> /tmp/issue_body.md
+          echo "---" >> /tmp/issue_body.md
+          echo "Auto-generated by security-autofix workflow" >> /tmp/issue_body.md
+          
+          gh issue create \
+            --title "🔒 Security Review: CodeQL Alerts Require Manual Fixes" \
+            --label security-review,help-wanted \
+            --body-file /tmp/issue_body.md

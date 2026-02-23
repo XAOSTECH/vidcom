@@ -196,15 +196,20 @@ static int compare_detections(const void* a, const void* b) {
 
 vidcom_highlight_detector_t* vidcom_detector_create(const vidcom_detector_config_t* config) {
     if (config == NULL || config->model_path == NULL) {
+        fprintf(stderr, "[DEBUG] Config or model_path is NULL\n");
         return NULL;
     }
     
+    fprintf(stderr, "[DEBUG] Initializing ORT API...\n");
     if (init_ort_api() != 0) {
+        fprintf(stderr, "[DEBUG] Failed to initialize ORT API\n");
         return NULL;
     }
     
+    fprintf(stderr, "[DEBUG] Allocating detector structure...\n");
     vidcom_highlight_detector_t* d = calloc(1, sizeof(vidcom_highlight_detector_t));
     if (d == NULL) {
+        fprintf(stderr, "[DEBUG] Failed to allocate detector\n");
         return NULL;
     }
     
@@ -212,29 +217,46 @@ vidcom_highlight_detector_t* vidcom_detector_create(const vidcom_detector_config
     d->config = *config;
     
     /* Set active ROI */
+    fprintf(stderr, "[DEBUG] Game type: %d, VIDCOM_GAME_COUNT: %d\n", config->game, VIDCOM_GAME_COUNT);
     if (config->custom_roi != NULL) {
+        fprintf(stderr, "[DEBUG] Using custom ROI\n");
         d->active_roi = *config->custom_roi;
     } else if (config->game < VIDCOM_GAME_COUNT) {
+        fprintf(stderr, "[DEBUG] Using game ROI for game type %d\n", config->game);
         d->active_roi = GAME_ROIS[config->game];
+        fprintf(stderr, "[DEBUG] ROI: x=%.2f, y=%.2f, w=%.2f, h=%.2f\n", 
+                d->active_roi.x, d->active_roi.y, d->active_roi.width, d->active_roi.height);
     } else {
+        fprintf(stderr, "[DEBUG] Using generic ROI\n");
         d->active_roi = GAME_ROIS[VIDCOM_GAME_GENERIC];
     }
     
     OrtStatus* status = NULL;
     
     /* Create environment */
+    fprintf(stderr, "[DEBUG] Creating ORT environment...\n");
+    fprintf(stderr, "[DEBUG] g_ort pointer: %p\n", (void*)g_ort);
+    fprintf(stderr, "[DEBUG] g_ort->CreateEnv pointer: %p\n", (void*)g_ort->CreateEnv);
+    fprintf(stderr, "[DEBUG] About to call CreateEnv...\n");
+    fflush(stderr);
     status = g_ort->CreateEnv(ORT_LOGGING_LEVEL_WARNING, "vidcom_detector", &d->env);
+    fprintf(stderr, "[DEBUG] CreateEnv returned\n");
     if (check_status(d, status) != 0) goto cleanup;
     
     /* Create session options */
+    fprintf(stderr, "[DEBUG] Creating session options...\n");
     status = g_ort->CreateSessionOptions(&d->session_opts);
+    fprintf(stderr, "[DEBUG] Session options created\n");
     if (check_status(d, status) != 0) goto cleanup;
     
     /* Enable optimization */
+    fprintf(stderr, "[DEBUG] Setting graph optimization...\n");
     g_ort->SetSessionGraphOptimizationLevel(d->session_opts, ORT_ENABLE_ALL);
+    fprintf(stderr, "[DEBUG] Graph optimization set\n");
     
     /* Add CUDA execution provider if requested */
     if (config->use_gpu) {
+        fprintf(stderr, "[DEBUG] Adding CUDA provider...\n");
         OrtCUDAProviderOptions cuda_opts;
         memset(&cuda_opts, 0, sizeof(cuda_opts));
         cuda_opts.device_id = config->device_id;
@@ -243,17 +265,23 @@ vidcom_highlight_detector_t* vidcom_detector_create(const vidcom_detector_config
         if (status != NULL) {
             fprintf(stderr, "[vidcom] CUDA not available for detector, using CPU\n");
             g_ort->ReleaseStatus(status);
+        } else {
+            fprintf(stderr, "[DEBUG] CUDA provider added\n");
         }
     }
     
     /* Create session */
+    fprintf(stderr, "[DEBUG] Creating session with model: %s\n", config->model_path);
     status = g_ort->CreateSession(d->env, config->model_path, 
                                    d->session_opts, &d->session);
+    fprintf(stderr, "[DEBUG] Session created\n");
     if (check_status(d, status) != 0) goto cleanup;
     
     /* Create memory info */
+    fprintf(stderr, "[DEBUG] Creating CPU memory info...\n");
     status = g_ort->CreateCpuMemoryInfo(OrtArenaAllocator, OrtMemTypeDefault, 
                                          &d->memory_info);
+    fprintf(stderr, "[DEBUG] CPU memory info created\n");
     if (check_status(d, status) != 0) goto cleanup;
     
     /* Get input info */
