@@ -7,11 +7,11 @@
 # 2. Create project, enable YouTube Data API v3
 # 3. Create OAuth 2.0 credentials (Desktop application)
 # 4. Run: ./yt-auth.sh --setup
-# 5. Follow browser authorization flow
+# 5. Follow browser authorisation flow
 #
 # Usage:
 #   ACCESS_TOKEN=$(./yt-auth.sh)
-#   curl -H "Authorization: Bearer $ACCESS_TOKEN" ...
+#   curl -H "Authorisation: Bearer $ACCESS_TOKEN" ...
 
 set -euo pipefail
 
@@ -27,7 +27,7 @@ REDIRECT_URI="urn:ietf:wg:oauth:2.0:oob"
 # Scopes must be URL-encoded (space = %20)
 SCOPE="https://www.googleapis.com/auth/youtube.upload%20https://www.googleapis.com/auth/youtube"
 
-# Colors
+# Colours
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -68,11 +68,11 @@ setup_oauth() {
         exit 1
     fi
     
-    # Generate authorization URL
+    # Generate authorisation URL
     local AUTH_URL="${AUTH_URI}?client_id=${CLIENT_ID}&redirect_uri=${REDIRECT_URI}&scope=${SCOPE}&response_type=code&access_type=offline&prompt=consent"
     
     echo "" >&2
-    log_info "Opening browser for authorization..."
+    log_info "Opening browser for authorisation..."
     log_info "If browser doesn't open, visit this URL manually:"
     echo "" >&2
     echo "$AUTH_URL" >&2
@@ -99,17 +99,17 @@ setup_oauth() {
         log_info "Then run: $CHROMIUM_SCRIPT oauth"
     fi
     
-    # Get authorization code from user
+    # Get authorisation code from user
     echo "" >&2
-    read -p "Enter the authorization code: " AUTH_CODE
+    read -p "Enter the authorisation code: " AUTH_CODE
     
     if [[ -z "$AUTH_CODE" ]]; then
-        log_error "No authorization code provided"
+        log_error "No authorisation code provided"
         exit 1
     fi
     
     # Exchange code for tokens
-    log_info "Exchanging authorization code for tokens..."
+    log_info "Exchanging authorisation code for tokens..."
     
     local RESPONSE=$(curl -s -X POST "$TOKEN_URI" \
         -d "client_id=$CLIENT_ID" \
@@ -293,7 +293,7 @@ main() {
             echo "Usage: $0 [OPTIONS]" >&2
             echo "" >&2
             echo "Options:" >&2
-            echo "  --setup, -s    Run initial OAuth authorization flow" >&2
+            echo "  --setup, -s    Run initial OAuth authorisation flow" >&2
             echo "  --status       Show current authentication status" >&2
             echo "  --refresh, -r  Force token refresh" >&2
             echo "  --help, -h     Show this help message" >&2

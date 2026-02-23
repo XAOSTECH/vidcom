@@ -17,7 +17,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Colors
+# Colours
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -143,7 +143,7 @@ log_info "Privacy: $PRIVACY"
 log_info "File: $VIDEO_FILE ($(numfmt --to=iec $FILE_SIZE))"
 
 #------------------------------------------------------------------------------
-# Phase 1: Initialize resumable upload
+# Phase 1: Initialise resumable upload
 #------------------------------------------------------------------------------
 log_step "Phase 1: Requesting upload URL..."
 
