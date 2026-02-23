@@ -76,7 +76,7 @@ VIDCOM is a high-performance video compilation pipeline designed for gaming cont
 
 - **Pure C Implementation** - Minimal dependencies, maximum performance with ONNX Runtime
 - **GPU Accelerated** - NVENC/NVDEC encoding with CUDA inference for real-time processing
-- **Game-Specific Detection** - Optimized ROI regions for Fortnite, Valorant, CS2, Overwatch, Apex
+- **Game-Specific Detection** - Optimised ROI regions for Fortnite, Valorant, CS2, Overwatch, Apex
 - **End-to-End Pipeline** - From raw stream to uploaded YouTube Short in one command
 
 ---
@@ -144,7 +144,7 @@ Detect highlights (kills, headshots, etc.) in gaming footage:
 # Basic usage
 ./build/vidcom highlights video.mp4
 
-# With game-specific optimization
+# With game-specific optimisation
 ./build/vidcom highlights stream.mp4 --game fortnite --confidence 0.6
 
 # Verbose output
@@ -209,7 +209,7 @@ highlight_model = models/highlight_yolov8n.onnx
 # Detection confidence (0.0-1.0)
 confidence_threshold = 0.5
 
-# Game type for optimized detection
+# Game type for optimised detection
 game = fortnite
 
 # Segment timing
@@ -229,9 +229,9 @@ max_duration = 60
 | Game | Flag | Detection Region |
 |------|------|------------------|
 | Fortnite | `--game fortnite` | Top-right kill feed |
-| Valorant | `--game valorant` | Center kill confirmation |
+| Valorant | `--game valorant` | Centre kill confirmation |
 | CS2 | `--game csgo2` | Top-right killfeed |
-| Overwatch | `--game overwatch` | Center elimination popup |
+| Overwatch | `--game overwatch` | Centre elimination popup |
 | Apex Legends | `--game apex` | Top-right kill feed |
 
 ### Highlight Classes

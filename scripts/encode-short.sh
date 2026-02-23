@@ -11,7 +11,7 @@
 
 set -euo pipefail
 
-# Colors
+# Colours
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -49,7 +49,7 @@ usage() {
     echo "Options:"
     echo "  --quality N    Constant quality (15-28, default: 20)"
     echo "  --preset P     NVENC preset p1-p7 (default: p4)"
-    echo "  --focus F      Crop focus: center|top|bottom (default: center)"
+    echo "  --focus F      Crop focus: centre|top|bottom (default: centre)"
     echo "  --no-audio     Strip audio"
     echo "  --cpu          Use CPU encoding (no GPU required)"
     echo "  --help         Show this help"
@@ -123,9 +123,9 @@ fi
 
 # Validate focus
 case "$FOCUS" in
-    center|top|bottom|left|right) ;;
+    centre|top|bottom|left|right) ;;
     *)
-        log_error "Invalid focus: $FOCUS (use: center, top, bottom, left, right)"
+        log_error "Invalid focus: $FOCUS (use: centre, top, bottom, left, right)"
         exit 1
         ;;
 esac
@@ -133,7 +133,7 @@ esac
 #------------------------------------------------------------------------------
 # Detect input dimensions
 #------------------------------------------------------------------------------
-log_info "Analyzing input video..."
+log_info "Analysing input video..."
 
 PROBE=$(ffprobe -v error -select_streams v:0 \
     -show_entries stream=width,height,duration \
@@ -176,7 +176,7 @@ if [[ "$CROP_NEEDED" == "1" ]]; then
         right)
             CROP_X=$((IN_W - CROP_W))
             ;;
-        *)  # center
+        *)  # centre
             CROP_X=$(( (IN_W - CROP_W) / 2 ))
             ;;
     esac
@@ -193,7 +193,7 @@ else
         bottom)
             CROP_Y=$((IN_H - CROP_H))
             ;;
-        *)  # center
+        *)  # centre
             CROP_Y=$(( (IN_H - CROP_H) / 2 ))
             ;;
     esac
