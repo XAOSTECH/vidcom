@@ -24,7 +24,7 @@ COOKIES_FILE="${PROJECT_DIR}/.browser-data/cookies.txt"
 # Chromium binary location
 CHROMIUM_BIN="${PROJECT_DIR}/chromium/chrome-linux64/chrome"
 
-# Colors
+# Colours
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -37,7 +37,7 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1" >&2; }
 log_step()  { echo -e "${CYAN}[STEP]${NC} $1"; }
 
 #------------------------------------------------------------------------------
-# Initialize processed videos database
+# Initialise processed videos database
 #------------------------------------------------------------------------------
 init_db() {
     if [[ ! -f "$PROCESSED_DB" ]]; then
@@ -249,7 +249,7 @@ cmd_playlist() {
         local url="https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails&playlistId=${playlist_id}&maxResults=50"
         [[ -n "$page_token" ]] && url+="&pageToken=${page_token}"
         
-        local response=$(curl -s -H "Authorization: Bearer $token" "$url")
+        local response=$(curl -s -H "Authorisation: Bearer $token" "$url")
         
         local error=$(echo "$response" | jq -r '.error.message // empty')
         if [[ -n "$error" ]]; then

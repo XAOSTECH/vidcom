@@ -115,7 +115,7 @@ clear_profile_locks() {
 # Set up Chrome preferences for VIDCOM use case
 # - Disable password saving prompts
 # - Set homepage to VIDCOM dashboard
-# - Optimize for container/testing environment
+# - Optimise for container/testing environment
 #------------------------------------------------------------------------------
 setup_chrome_preferences() {
     local prefs_dir="$USER_DATA_DIR/Default"
@@ -125,7 +125,7 @@ setup_chrome_preferences() {
     
     # Only create if doesn't exist (don't overwrite user customizations)
     if [[ ! -f "$prefs_file" ]]; then
-        log "Initializing Chrome preferences for VIDCOM..."
+        log "Initialising Chrome preferences for VIDCOM..."
         cat > "$prefs_file" << 'PREFS_EOF'
 {
   "credentials_enable_service": false,
@@ -408,7 +408,7 @@ cmd_install() {
     unzip -q "$zip_file" -d "$CHROMIUM_DIR" || die "Extract failed"
     rm -f "$zip_file"
     
-    # Find and normalize the chrome binary location
+    # Find and normalise the chrome binary location
     # Different builds have different directory structures
     local chrome_path=""
     for candidate in \
@@ -467,7 +467,7 @@ cmd_launch() {
         die "Chromium not installed. Run: $0 install"
     fi
     
-    # Create user data dir and initialize preferences
+    # Create user data dir and initialise preferences
     mkdir -p "$USER_DATA_DIR"
     
     # Fix permissions: .config must be writable for Chrome crashpad handler
@@ -504,7 +504,7 @@ cmd_launch() {
         display_type="wayland"
     fi
     
-    # Build args - optimized for container/devcontainer environments
+    # Build args - optimised for container/devcontainer environments
     local args=(
         "--user-data-dir=$USER_DATA_DIR"
         "--no-first-run"

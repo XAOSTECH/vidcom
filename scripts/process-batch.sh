@@ -14,7 +14,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 VIDCOM="${PROJECT_DIR}/build/vidcom"
 
-# Colors
+# Colours
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -255,7 +255,7 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     TITLE=$(echo "$line" | jq -r '.title // "Untitled"')
     DESCRIPTION=$(echo "$line" | jq -r '.description // ""')
     TAGS=$(echo "$line" | jq -r '.tags // ""')
-    FOCUS=$(echo "$line" | jq -r '.focus // "center"')
+    FOCUS=$(echo "$line" | jq -r '.focus // "centre"')
     
     # Generate output filename
     SAFE_TITLE=$(echo "$TITLE" | tr -cs '[:alnum:]' '_' | head -c 50)
