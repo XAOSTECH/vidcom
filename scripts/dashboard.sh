@@ -61,7 +61,7 @@ EOF
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: var(--bg);
-            color: var(--text);
+            colour: var(--text);
             min-height: 100vh;
             padding: 2rem;
         }
@@ -70,13 +70,13 @@ EOF
             font-size: 2rem;
             margin-bottom: 2rem;
             display: flex;
-            align-items: center;
+            align-items: centre;
             gap: 1rem;
         }
         h1 .logo { font-size: 2.5rem; }
         h2 {
             font-size: 1.2rem;
-            color: var(--text-dim);
+            colour: var(--text-dim);
             margin-bottom: 1rem;
             text-transform: uppercase;
             letter-spacing: 0.1em;
@@ -89,7 +89,7 @@ EOF
         }
         .status-bar {
             display: flex;
-            align-items: center;
+            align-items: centre;
             gap: 1rem;
         }
         .status-indicator {
@@ -125,7 +125,7 @@ EOF
         }
         .upload-item {
             display: flex;
-            align-items: center;
+            align-items: centre;
             gap: 1rem;
             padding: 1rem;
             background: var(--primary);
@@ -137,9 +137,9 @@ EOF
             background: var(--bg);
             border-radius: 4px;
             display: flex;
-            align-items: center;
-            justify-content: center;
-            color: var(--text-dim);
+            align-items: centre;
+            justify-content: centre;
+            colour: var(--text-dim);
             font-size: 0.8rem;
         }
         .upload-info { flex: 1; }
@@ -149,10 +149,10 @@ EOF
         }
         .upload-meta {
             font-size: 0.85rem;
-            color: var(--text-dim);
+            colour: var(--text-dim);
         }
         .upload-link {
-            color: var(--accent);
+            colour: var(--accent);
             text-decoration: none;
             padding: 0.5rem 1rem;
             border: 1px solid var(--accent);
@@ -161,7 +161,7 @@ EOF
         }
         .upload-link:hover {
             background: var(--accent);
-            color: var(--bg);
+            colour: var(--bg);
         }
         .queue-item {
             padding: 0.75rem 1rem;
@@ -170,22 +170,22 @@ EOF
             margin-bottom: 0.5rem;
             display: flex;
             justify-content: space-between;
-            align-items: center;
+            align-items: centre;
         }
         .queue-item .filename { font-family: monospace; }
         .queue-item .status { 
             font-size: 0.8rem;
-            color: var(--text-dim);
+            colour: var(--text-dim);
         }
         .empty-state {
-            text-align: center;
+            text-align: centre;
             padding: 2rem;
-            color: var(--text-dim);
+            colour: var(--text-dim);
         }
         .refresh-info {
-            text-align: center;
+            text-align: centre;
             font-size: 0.8rem;
-            color: var(--text-dim);
+            colour: var(--text-dim);
             margin-top: 2rem;
         }
     </style>
@@ -203,7 +203,7 @@ EOF
             <div class="progress-bar">
                 <div class="progress-fill" id="progressFill" style="width: 0%"></div>
             </div>
-            <p id="statusMessage" style="margin-top: 0.5rem; color: var(--text-dim); font-size: 0.9rem;"></p>
+            <p id="statusMessage" style="margin-top: 0.5rem; colour: var(--text-dim); font-size: 0.9rem;"></p>
         </div>
         
         <div class="card">
