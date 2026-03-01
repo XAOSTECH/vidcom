@@ -1,9 +1,9 @@
 #!/bin/bash
 #
-# collect-training-data.sh - Extract frames from gaming videos for labeling
+# collect-training-data.sh - Extract frames from gaming videos for labelling
 #
-# This script extracts frames from gaming videos, organizing them by game
-# and timestamp for manual labeling with tools like LabelImg or CVAT.
+# This script extracts frames from gaming videos, organising them by game
+# and timestamp for manual labelling with tools like LabelImg or CVAT.
 #
 # Usage:
 #   ./scripts/collect-training-data.sh [options] <video_file|video_dir>
@@ -22,7 +22,7 @@
 
 set -e
 
-# Colors
+# Colours
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -53,9 +53,9 @@ INPUT_PATH=""
 # These crop to the kill feed/notification areas
 declare -A GAME_ROI
 GAME_ROI[fortnite]="0.7:0.0:0.3:0.35"      # Top-right
-GAME_ROI[valorant]="0.35:0.4:0.3:0.2"      # Center
+GAME_ROI[valorant]="0.35:0.4:0.3:0.2"      # Centre
 GAME_ROI[csgo2]="0.6:0.0:0.4:0.3"          # Top-right
-GAME_ROI[overwatch]="0.35:0.35:0.3:0.3"    # Center
+GAME_ROI[overwatch]="0.35:0.35:0.3:0.3"    # Centre
 GAME_ROI[apex]="0.6:0.0:0.4:0.35"          # Top-right
 
 usage() {
@@ -294,7 +294,7 @@ EOF
     log_info "Created: $yaml_path"
 }
 
-# Print labeling instructions
+# Print labelling instructions
 print_instructions() {
     echo
     log_info "====================================="
@@ -309,7 +309,7 @@ print_instructions() {
     echo "  2. Save annotations in YOLO format (.txt files)"
     echo "     - One .txt per image in labels/ directory"
     echo "     - Format: <class> <x_center> <y_center> <width> <height>"
-    echo "     - All values normalized 0-1"
+    echo "     - All values normalised 0-1"
     echo ""
     echo "  3. Create validation split:"
     echo "     mkdir -p ${OUTPUT_DIR}/images/val"
