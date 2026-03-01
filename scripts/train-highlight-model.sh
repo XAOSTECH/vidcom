@@ -2,14 +2,14 @@
 #
 # train-highlight-model.sh - Train YOLOv11 model for gaming highlight detection
 #
-# This script trains a YOLOv11n (nano) model on labeled gaming highlight data
+# This script trains a YOLOv11n (nano) model on labelled gaming highlight data
 # and exports it to ONNX format for use with vidcom.
 #
 # Prerequisites:
 #   - Python 3.10+ with pip
 #   - CUDA 11.8+ (for GPU training)
 #   - At least 8GB GPU VRAM (recommended: 16GB+)
-#   - Labeled dataset in YOLO format
+#   - Labelled dataset in YOLO format
 #
 # Usage:
 #   ./scripts/train-highlight-model.sh [options]
@@ -27,7 +27,7 @@
 
 set -e
 
-# Colors for output
+# Colours for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -209,7 +209,7 @@ export_model() {
     
     log_info "Exporting: $BEST_PT"
     
-    # Export to ONNX with optimizations
+    # Export to ONNX with optimisations
     EXPORT_CMD="yolo export"
     EXPORT_CMD+=" model=$BEST_PT"
     EXPORT_CMD+=" format=onnx"

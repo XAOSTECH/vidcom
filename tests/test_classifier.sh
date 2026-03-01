@@ -44,7 +44,7 @@ echo "Testing with: $SAMPLE_VIDEO"
 echo ""
 
 # Run analysis
-"$BUILD_DIR/vidcom" --verbose analyze "$SAMPLE_VIDEO"
+"$BUILD_DIR/vidcom" --verbose analyse "$SAMPLE_VIDEO"
 
 echo ""
 echo "=== Test Complete ==="

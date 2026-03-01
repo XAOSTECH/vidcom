@@ -13,7 +13,7 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 VIDCOM="${PROJECT_DIR}/build/vidcom"
 OUTPUT_DIR="${PROJECT_DIR}/output"
 
-# Colors
+# Colours
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -128,7 +128,7 @@ test_module_compiled() {
 }
 
 #------------------------------------------------------------------------------
-# Test: All game types recognized
+# Test: All game types recognised
 #------------------------------------------------------------------------------
 test_game_types() {
     log_test "Checking game type recognition"
@@ -142,13 +142,13 @@ test_game_types() {
         
         # Should not say "Unknown game"
         if echo "$output" | grep -qi "unknown game"; then
-            log_fail "Game '$game' not recognized"
+            log_fail "Game '$game' not recognised"
             all_passed=false
         fi
     done
     
     if $all_passed; then
-        log_pass "All game types recognized"
+        log_pass "All game types recognised"
     fi
 }
 
