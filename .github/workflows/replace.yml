@@ -39,7 +39,7 @@ jobs:
           private-key: ${{ secrets['XB_PK'] }}
 
       - name: Setup bot identity
-        uses: XAOSTECH/dev-control/.github/actions/identity@main
+        uses: XAOSTECH/dev-control/.github/actions/identity@b067f72ca7f849b734a45634f23581a739d5146f # v2.0.0
         with:
           gpg-private-key: ${{ secrets['XB_GK'] }}
           gpg-passphrase: ${{ secrets['XB_GP'] }}
@@ -137,7 +137,7 @@ jobs:
       - name: Setup bot identity (if replacement needed)
         id: import_gpg
         if: steps.replace.outputs.needs_pr == 'true'
-        uses: XAOSTECH/dev-control/.github/actions/identity@main
+        uses: XAOSTECH/dev-control/.github/actions/identity@b067f72ca7f849b734a45634f23581a739d5146f # v2.0.0
         with:
           gpg-private-key: ${{ secrets['XB_GK'] }}
           gpg-passphrase: ${{ secrets['XB_GP'] }}
