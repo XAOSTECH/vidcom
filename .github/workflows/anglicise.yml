@@ -28,7 +28,7 @@ jobs:
           private-key: ${{ secrets['XB_PK'] }}
 
       - name: Setup bot identity
-        uses: XAOSTECH/dev-control/.github/actions/identity@main
+        uses: XAOSTECH/dev-control/.github/actions/identity@b067f72ca7f849b734a45634f23581a739d5146f # v2.0.0
         with:
           gpg-private-key: ${{ secrets['XB_GK'] }}
           gpg-passphrase: ${{ secrets['XB_GP'] }}
@@ -297,6 +297,7 @@ jobs:
           plows|ploughs|plow → plough
           plowed|ploughed|plow → plough
           plowing|ploughing|plow → plough
+          license|licence|license → licence
           WORDLIST
 
           # Find files to check
@@ -306,7 +307,8 @@ jobs:
             ! -path "./vendor/*" \
             ! -path "./.github/workflows/*" \
             ! -path "./workflows-templates/anglicise.yml" \
-            ! -path "./license-templates/*" \
+            ! -path "./licence-templates/*" \
+            ! -path "./LICENSE" \
             2>/dev/null | sort)
 
           echo "## British English Spelling Check" >> $GITHUB_STEP_SUMMARY
@@ -334,7 +336,7 @@ jobs:
               # - Variable references ($color, ${color})
               # - Assignment patterns (color=, COLOR=) including query params
               MATCHES=$(grep -inw "$american" "$file" 2>/dev/null | \
-                grep -vE '(https?://|file://|[?&](color|center|gray)=[a-zA-Z0-9]+|"Authorization": "Bearer|types:[[:space:]]*\[[^]]+\]|--[a-z-]+ (center|color|gray)|\$\{?(color|center|gray)|}|\b(color|center|gray)[_A-Z]*=|gum |\\$)' || true)
+                grep -vE '(https?://|file://|github/|[?&](color|center|gray|licence)=[a-zA-Z0-9]+|"Authorization": "Bearer|types:[[:space:]]*\[[^]]+\]|--[a-z-]+ (center|color|gray)|\$\{?(color|center|gray);}|\b(color|center|gray|licence)[_A-Z]*=|gum |\\$|shields\.io)' || true)
               
               if [[ -n "$MATCHES" ]]; then
                 FILES_TO_FIX["$file"]=1
@@ -390,7 +392,8 @@ jobs:
             ! -path "./vendor/*" \
             ! -path "./.github/workflows/*" \
             ! -path "./workflows-templates/anglicise.yml" \
-            ! -path "./license-templates/*" \
+            ! -path "./licence-templates/*" \
+            ! -path "./LICENSE" \
             2>/dev/null)
           
           FIXED_COUNT=0
@@ -416,26 +419,26 @@ jobs:
               # - Escaped line continuations (trailing backslash)
               # NOTE: filename exclusion is handled in the perl regex via (?!\.)
               # so that 'colors' in a comment is fixed even if 'colours.sh' appears on the same line
-              if echo "$line" | grep -qE "(=[\"'](center|color)|types:[[:space:]]*\[[^]]+\]|--[a-z-]+ (center|color|gray)|--color|--center|\\$\\{?(color|center|gray)|\\b(COLOR|CENTER|GRAY)[_A-Z]*=|gum |\\\\$)"; then
+              if echo "$line" | grep -qE "(https?://|github/|[?&](color|center|gray|licence)=|=[\"'](center|color|licence)|types:[[:space:]]*\[[^]]+\]|--[a-z-]+ (center|color|gray)|--color|--center|\$\{?(color|center|gray|licence)|\b(COLOR|CENTER|GRAY|LICENCE)[_A-Z]*=|gum |\\$|shields\.io)"; then
                 echo "$line"
               else
                 # Apply case-preserving replacement using perl
                 # (?!\.) prevents replacing when the word is directly followed by a dot (e.g. colors.sh)
                 echo "$line" | perl -pe "
-                  s/\\b${american}\\b(?!\\.)/
+                  s{\b${american}\b(?!\.)(?![a-zA-Z0-9]|/|=)}{
                     my \$match = \$&;
                     my \$repl = '${british}';
-                    if (\$match =~ \/^[A-Z]+\$\/) {
+                    if (\$match =~ /^[A-Z]+\$/) {
                       # ALL CAPS
                       uc(\$repl);
-                    } elsif (\$match =~ \/^[A-Z]\/) {
+                    } elsif (\$match =~ /^[A-Z]/) {
                       # Title Case
                       ucfirst(\$repl);
                     } else {
                       # lowercase
                       \$repl;
                     }
-                  /gei"
+                  }gei"
               fi
             done < "$file" > "$tmpfile"
             
@@ -452,7 +455,7 @@ jobs:
               
               # Check if file contains the word (case-insensitive, whole word)
               # Exclude lines where the match is inside a code/CLI pattern (filename exclusion handled by perl (?!\.))
-              if grep -inw "$american" "$file" 2>/dev/null | grep -qvE "(https?://|[?&](color|center|gray)=[a-zA-Z0-9]+|\"Authorization\": \"Bearer|types:[[:space:]]*\[[^]]+\]|=[\"'](center|color)|--[a-z-]+ (center|color|gray)|--color|--center|\\$\\{?(color|center|gray)|\\b(COLOR|CENTER|GRAY)[_A-Z]*|gum |\\\\$)"; then
+              if grep -inw "$american" "$file" 2>/dev/null | grep -qvE "(https?://|file://|github/|[?&](color|center|gray|licence)=[a-zA-Z0-9]+|\"Authorization\": \"Bearer|types:[[:space:]]*\[[^]]+\]|=[\"'](center|color|licence)|--[a-z-]+ (center|color|gray)|--color|--center|\$\{?(color|center|gray|licence)|\b(COLOR|CENTER|GRAY|LICENCE)[_A-Z]*|gum |\\$|shields\.io)"; then
                 case_preserve_replace "$file" "$american" "$british"
                 echo "  ✓ Fixed in: $file"
                 FIXED_COUNT=$((FIXED_COUNT + 1))
@@ -465,7 +468,7 @@ jobs:
       - name: Setup bot identity (if fixes needed)
         id: import_gpg
         if: steps.check.outputs.needs_fix == 'true'
-        uses: XAOSTECH/dev-control/.github/actions/identity@main
+        uses: XAOSTECH/dev-control/.github/actions/identity@b067f72ca7f849b734a45634f23581a739d5146f # v2.0.0
         with:
           gpg-private-key: ${{ secrets['XB_GK'] }}
           gpg-passphrase: ${{ secrets['XB_GP'] }}

@@ -20,8 +20,6 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write
-  checks: write
 
 jobs:
   shellcheck:
@@ -46,9 +44,9 @@ jobs:
         id: find_scripts
         run: |
           SCRIPTS=$(find . -type f -name "*.sh" ! -path "./.git/*" ! -path "./node_modules/*" ! -path "./vendor/*")
-          echo "scripts<<EOF" >> $GITHUB_OUTPUT
-          echo "$SCRIPTS" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          echo "scripts<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$SCRIPTS" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
           echo "Script count: $(echo "$SCRIPTS" | wc -l)"
 
       - name: Run ShellCheck on all shell scripts
@@ -76,17 +74,17 @@ jobs:
       - name: Summary report
         if: always()
         run: |
-          echo "## Bash Linting Report" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Tool**: ShellCheck" >> $GITHUB_STEP_SUMMARY
-          echo "**Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Best Practices Applied" >> $GITHUB_STEP_SUMMARY
-          echo "- ✓ Use \`set -e\` for error handling" >> $GITHUB_STEP_SUMMARY
-          echo "- ✓ Quote variables to prevent word splitting" >> $GITHUB_STEP_SUMMARY
-          echo "- ✓ Use \`[[ ]]\` for conditionals" >> $GITHUB_STEP_SUMMARY
-          echo "- ✓ Add meaningful comments" >> $GITHUB_STEP_SUMMARY
-          echo "- ✓ Break scripts into functions" >> $GITHUB_STEP_SUMMARY
+          echo "## Bash Linting Report" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Tool**: ShellCheck" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Status**: ${{ job.status }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Best Practices Applied" >> "$GITHUB_STEP_SUMMARY"
+          echo "- ✓ Use \`set -e\` for error handling" >> "$GITHUB_STEP_SUMMARY"
+          echo "- ✓ Quote variables to prevent word splitting" >> "$GITHUB_STEP_SUMMARY"
+          echo "- ✓ Use \`[[ ]]\` for conditionals" >> "$GITHUB_STEP_SUMMARY"
+          echo "- ✓ Add meaningful comments" >> "$GITHUB_STEP_SUMMARY"
+          echo "- ✓ Break scripts into functions" >> "$GITHUB_STEP_SUMMARY"
 
   bash-formatting:
     name: Bash Code Quality
