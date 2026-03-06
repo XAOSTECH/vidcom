@@ -1,0 +1,659 @@
+# ============================================================================
+# Repository Update Workflow Template (update.yml)
+# ============================================================================
+#
+# ORIGIN: https://github.com/XAOSTECH/dev-control
+# This workflow template is part of the dev-control toolkit.
+# See: https://github.com/XAOSTECH/dev-control/blob/main/workflows-templates/
+#
+# ============================================================================
+#
+# Automates repository maintenance tasks including:
+#   - Detecting accumulated changes and auto-triggering releases
+#   - Updating submodules that have fallen behind
+#   - Keeping monorepo dependencies synchronized
+#
+# TRIGGERS:
+#   - Schedule: Weekly on Monday at 00:00 UTC
+#   - Manual dispatch with customisable options
+#
+# WHAT IT DOES:
+#   1. Checks commits since last release
+#   2. If 5+ commits found, automatically triggers release workflow
+#   3. Scans submodules for updates (5+ commits behind main)
+#   4. Updates outdated submodules and creates PR
+#   5. Generates summary report
+#
+# SAFEGUARDS:
+#   ✓ Dry-run mode for testing
+#   ✓ Minimum threshold checks (configurable)
+#   ✓ Creates PR instead of direct commit for review
+#   ✓ Detailed summary with change counts
+#
+# CONFIGURATION:
+#   Adjust thresholds via workflow inputs:
+#   - release_threshold: Minimum commits to trigger release (default: 5)
+#   - submodule_threshold: Minimum commits behind to update (default: 5)
+#
+# BEST PRACTICES:
+#   - Review the generated PR before merging
+#   - Use dry-run mode first to preview changes
+#   - Adjust thresholds based on your release cadence
+#   - Check submodule references match intended versions
+#
+# CUSTOMISATION:
+#   - Edit schedule cron for different timing
+#   - Modify thresholds for your workflow
+#   - Add additional checks in the detection steps
+#   - Customise PR template and labels
+#
+# ============================================================================
+
+name: Repository Update
+
+on:
+  schedule:
+    - cron: '0 0 * * 1'  # Weekly on Monday at midnight UTC
+  workflow_dispatch:
+    inputs:
+      check_release:
+        description: 'Check for accumulated changes and trigger release'
+        required: false
+        type: boolean
+        default: true
+      check_submodules:
+        description: 'Check and update submodules'
+        required: false
+        type: boolean
+        default: true
+      release_threshold:
+        description: 'Minimum commits since last release to trigger re-release'
+        required: false
+        type: number
+        default: 5
+      submodule_threshold:
+        description: 'Minimum commits behind to update submodule'
+        required: false
+        type: number
+        default: 5
+      dry_run:
+        description: 'Dry run - report only, no changes'
+        required: false
+        type: boolean
+        default: false
+      check_dependencies:
+        description: 'Check and update dependencies (package.json, requirements.txt)'
+        required: false
+        type: boolean
+        default: true
+      cleanup_branches:
+        description: 'Delete stale merged branches (>5 days old)'
+        required: false
+        type: boolean
+        default: true
+      branch_age_days:
+        description: 'Days after merge to consider branch stale'
+        required: false
+        type: number
+        default: 5
+      check_stale_issues:
+        description: 'Check and comment on stale issues/PRs'
+        required: false
+        type: boolean
+        default: true
+      stale_days:
+        description: 'Days of inactivity to consider issue/PR stale'
+        required: false
+        type: number
+        default: 60
+      dummy_commit:
+        description: 'Amend HEAD for serverless deployment (gcda-style, no SHA change)'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+  issues: write
+
+concurrency:
+  group: update-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  update:
+    name: Check Repository Updates
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Generate App Token
+        id: app_token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets['XB_AI'] }}
+          private-key: ${{ secrets['XB_PK'] }}
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for commit counting
+          submodules: recursive
+          token: ${{ steps.app_token.outputs.token }}
+
+      - name: Setup bot identity
+        uses: XAOSTECH/dev-control/.github/actions/identity@b067f72ca7f849b734a45634f23581a739d5146f # v2.0.0
+        with:
+          gpg-private-key: ${{ secrets['XB_GK'] }}
+          gpg-passphrase: ${{ secrets['XB_GP'] }}
+          user-token: ${{ secrets['XB_UT'] }}
+          bot-name: ${{ vars.BOT_NAME || 'xaos-bot' }}
+
+      - name: Check for release trigger
+        id: check_release
+        if: ${{ github.event.inputs.check_release != 'false' }}
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+          RELEASE_THRESHOLD: ${{ github.event.inputs.release_threshold || '5' }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+        run: |
+          echo "## 📦 Release Check" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Get latest release tag
+          LATEST_TAG=$(gh api repos/${{ github.repository }}/releases/latest --jq '.tag_name' 2>/dev/null || \
+                       git tag --list 'v*' --sort=-version:refname | grep -vE 'latest|alpha|beta|rc' | head -1 || echo "")
+          
+          if [[ -z "$LATEST_TAG" ]]; then
+            echo "ℹ️ No previous release found - skipping release check"
+            echo "ℹ️ **No previous release found**" >> $GITHUB_STEP_SUMMARY
+            echo "trigger_release=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # Count commits since last release
+          COMMIT_COUNT=$(git log "${LATEST_TAG}..HEAD" --oneline | wc -l)
+          
+          echo "📊 Latest release: $LATEST_TAG" | tee -a $GITHUB_STEP_SUMMARY
+          echo "📊 Commits since last release: $COMMIT_COUNT" | tee -a $GITHUB_STEP_SUMMARY
+          echo "🎯 Release threshold: $RELEASE_THRESHOLD" | tee -a $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [[ $COMMIT_COUNT -ge $RELEASE_THRESHOLD ]]; then
+            echo "✅ Threshold met - release should be triggered" | tee -a $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Recent Changes" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            git log "${LATEST_TAG}..HEAD" --oneline | head -20 >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            echo "trigger_release=true" >> $GITHUB_OUTPUT
+            echo "commit_count=$COMMIT_COUNT" >> $GITHUB_OUTPUT
+            echo "latest_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+          else
+            echo "ℹ️ Not enough changes - skipping release ($COMMIT_COUNT < $RELEASE_THRESHOLD)" | tee -a $GITHUB_STEP_SUMMARY
+            echo "trigger_release=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Trigger release workflow
+        if: steps.check_release.outputs.trigger_release == 'true' && github.event.inputs.dry_run != 'true'
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        run: |
+          echo "🚀 Triggering release workflow for re-release..."
+          
+          CURRENT_VERSION=$(gh api repos/${{ github.repository }}/releases/latest --jq '.tag_name' 2>/dev/null || \
+                            git tag --list 'v*' --sort=-version:refname | grep -vE 'latest|alpha|beta|rc' | head -1)
+          CURRENT_VERSION=${CURRENT_VERSION#v}
+          
+          echo "📌 Current version: ${CURRENT_VERSION}"
+          
+          gh workflow run release.yml \
+            --ref ${{ github.ref_name }} \
+            -f version="${CURRENT_VERSION}" \
+            -f prerelease=false \
+            -f draft=false
+          
+          echo "✅ Release workflow triggered successfully"
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "🚀 **Release workflow triggered** (re-release with ${{ steps.check_release.outputs.commit_count }} new commits)" >> $GITHUB_STEP_SUMMARY
+
+      - name: Check submodules
+        id: check_submodules
+        if: ${{ github.event.inputs.check_submodules != 'false' }}
+        env:
+          SUBMODULE_THRESHOLD: ${{ github.event.inputs.submodule_threshold || '5' }}
+        run: |
+          echo "## 📦 Submodule Check" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Check if .gitmodules exists
+          if [[ ! -f .gitmodules ]]; then
+            echo "ℹ️ No submodules found in repository"
+            echo "ℹ️ **No submodules configured**" >> $GITHUB_STEP_SUMMARY
+            echo "has_updates=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          UPDATES_NEEDED=0
+          UPDATES_LIST=""
+          
+          # Parse submodules
+          git config --file .gitmodules --get-regexp '^submodule\..*\.path$' | while read -r key path; do
+            name=$(echo "$key" | sed 's/^submodule\.\(.*\)\.path$/\1/')
+            url=$(git config --file .gitmodules --get "submodule.$name.url" || echo "")
+            branch=$(git config --file .gitmodules --get "submodule.$name.branch" || echo "main")
+            
+            if [[ -z "$url" || ! -d "$path" ]]; then
+              continue
+            fi
+            
+            echo "🔍 Checking: $name ($path)"
+            
+            # Get current commit in submodule
+            cd "$path"
+            CURRENT_COMMIT=$(git rev-parse HEAD 2>/dev/null || echo "")
+            
+            if [[ -z "$CURRENT_COMMIT" ]]; then
+              echo "  ⚠️ Failed to get current commit"
+              cd "$GITHUB_WORKSPACE"
+              continue
+            fi
+            
+            # Fetch latest from remote
+            git fetch origin "$branch" --quiet 2>/dev/null || true
+            LATEST_COMMIT=$(git rev-parse "origin/$branch" 2>/dev/null || echo "")
+            
+            if [[ -z "$LATEST_COMMIT" ]]; then
+              echo "  ⚠️ Failed to fetch remote branch: $branch"
+              cd "$GITHUB_WORKSPACE"
+              continue
+            fi
+            
+            # Count commits behind
+            if [[ "$CURRENT_COMMIT" != "$LATEST_COMMIT" ]]; then
+              COMMITS_BEHIND=$(git rev-list --count "${CURRENT_COMMIT}..${LATEST_COMMIT}" 2>/dev/null || echo "0")
+              
+              if [[ $COMMITS_BEHIND -ge $SUBMODULE_THRESHOLD ]]; then
+                echo "  ⚠️ $COMMITS_BEHIND commits behind (threshold: $SUBMODULE_THRESHOLD)"
+                UPDATES_NEEDED=$((UPDATES_NEEDED + 1))
+                UPDATES_LIST="${UPDATES_LIST}${name}:${path}:${COMMITS_BEHIND};"
+              else
+                echo "  ✅ Up to date ($COMMITS_BEHIND commits behind, below threshold)"
+              fi
+            else
+              echo "  ✅ Up to date"
+            fi
+            
+            cd "$GITHUB_WORKSPACE"
+          done
+          
+          echo "updates_needed=$UPDATES_NEEDED" >> $GITHUB_OUTPUT
+          echo "updates_list=$UPDATES_LIST" >> $GITHUB_OUTPUT
+          
+          if [[ $UPDATES_NEEDED -gt 0 ]]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "⚠️ **$UPDATES_NEEDED submodule(s) need updates**" >> $GITHUB_STEP_SUMMARY
+            echo "has_updates=true" >> $GITHUB_OUTPUT
+          else
+            echo "✅ **All submodules up to date**" >> $GITHUB_STEP_SUMMARY
+            echo "has_updates=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Update submodules
+        if: steps.check_submodules.outputs.has_updates == 'true' && github.event.inputs.dry_run != 'true'
+        run: |
+          echo "## 🔄 Updating Submodules" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          UPDATES_LIST="${{ steps.check_submodules.outputs.updates_list }}"
+          IFS=';' read -ra UPDATES <<< "$UPDATES_LIST"
+          
+          for update in "${UPDATES[@]}"; do
+            if [[ -z "$update" ]]; then continue; fi
+            
+            IFS=':' read -r name path commits_behind <<< "$update"
+            
+            echo "⬆️ Updating $name ($commits_behind commits)"
+            echo "- **$name** ($path): $commits_behind commits" >> $GITHUB_STEP_SUMMARY
+            
+            cd "$path"
+            
+            # Get branch to update to
+            branch=$(git config --file "$GITHUB_WORKSPACE/.gitmodules" --get "submodule.$name.branch" || echo "main")
+            
+            # Update to latest
+            git fetch origin "$branch" --quiet
+            git checkout "origin/$branch" --quiet
+            
+            cd "$GITHUB_WORKSPACE"
+          done
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Submodules updated successfully" >> $GITHUB_STEP_SUMMARY
+
+      - name: Create Pull Request
+        if: steps.check_submodules.outputs.has_updates == 'true' && github.event.inputs.dry_run != 'true'
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        run: |
+          # Check if there are any changes to commit
+          if git diff --cached --quiet && git diff --quiet; then
+            echo "ℹ️ No changes to commit"
+            exit 0
+          fi
+          
+          BRANCH_NAME="chore/update-submodules-$(date +%Y%m%d-%H%M%S)"
+          git checkout -b "$BRANCH_NAME"
+          
+          # Stage all submodule updates
+          git add .gitmodules
+          git add -A
+          
+          # Create commit
+          UPDATES_COUNT="${{ steps.check_submodules.outputs.updates_needed }}"
+          git commit -m "chore: update ${UPDATES_COUNT} submodule(s) to latest" \
+            -m "Automated update of submodules that were 5+ commits behind." \
+            -m "See workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          
+          git push origin "$BRANCH_NAME"
+          
+          # Create PR
+          gh pr create \
+            --title "chore: Update ${UPDATES_COUNT} submodule(s) to latest" \
+            --body "## 🔄 Automated Submodule Update\n\nThis PR updates submodules that have fallen behind by 5 or more commits.\n\n**Updated Submodules:** ${{ steps.check_submodules.outputs.updates_list }}\n\n**Triggered by:** [Repository Update Workflow](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})\n\n**What to Check:**\n- Review each submodule's changes between old and new commit\n- Ensure no breaking changes were introduced\n- Verify monorepo compatibility\n- Run tests locally if needed\n\nOnce approved, this will bring submodules up to date with their respective main branches." \
+            --base "${{ github.ref_name }}" \
+            --head "$BRANCH_NAME" \
+            --label "automated,dependencies,submodules"
+          
+          echo "✅ Pull request created successfully"
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📝 **Pull request created** for submodule updates" >> $GITHUB_STEP_SUMMARY
+
+      - name: Check dependencies
+        id: check_dependencies
+        if: ${{ github.event.inputs.check_dependencies != 'false' }}
+        run: |
+          echo "## 📦 Dependency Check" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          UPDATES_FOUND=0
+          UPDATES_FILES=""
+          
+          # Check package.json (npm)
+          if [[ -f package.json ]]; then
+            echo "🔍 Checking npm dependencies..."
+            if command -v npm &>/dev/null; then
+              npm outdated --json > outdated.json || true
+              if [[ -s outdated.json ]] && [[ $(cat outdated.json) != "{}" ]]; then
+                COUNT=$(jq 'length' outdated.json 2>/dev/null || echo "0")
+                if [[ $COUNT -gt 0 ]]; then
+                  echo "  ⚠️ Found $COUNT outdated npm package(s)"
+                  UPDATES_FOUND=$((UPDATES_FOUND + COUNT))
+                  UPDATES_FILES="${UPDATES_FILES}npm:${COUNT};"
+                  echo "- **npm**: $COUNT package(s)" >> $GITHUB_STEP_SUMMARY
+                fi
+              else
+                echo "  ✅ All npm packages up to date"
+              fi
+              rm -f outdated.json
+            fi
+          fi
+          
+          # Check requirements.txt (pip)
+          if [[ -f requirements.txt ]]; then
+            echo "🔍 Checking pip dependencies..."
+            if command -v pip &>/dev/null; then
+              pip list --outdated --format=json > pip-outdated.json 2>/dev/null || true
+              if [[ -s pip-outdated.json ]]; then
+                COUNT=$(jq 'length' pip-outdated.json 2>/dev/null || echo "0")
+                if [[ $COUNT -gt 0 ]]; then
+                  echo "  ⚠️ Found $COUNT outdated pip package(s)"
+                  UPDATES_FOUND=$((UPDATES_FOUND + COUNT))
+                  UPDATES_FILES="${UPDATES_FILES}pip:${COUNT};"
+                  echo "- **pip**: $COUNT package(s)" >> $GITHUB_STEP_SUMMARY
+                fi
+              else
+                echo "  ✅ All pip packages up to date"
+              fi
+              rm -f pip-outdated.json
+            fi
+          fi
+          
+          # Check go.mod (Go)
+          if [[ -f go.mod ]]; then
+            echo "🔍 Checking Go dependencies..."
+            if command -v go &>/dev/null; then
+              go list -u -m -json all 2>/dev/null | jq -s '[.[] | select(.Update)] | length' > go-updates 2>/dev/null || echo "0" > go-updates
+              COUNT=$(cat go-updates)
+              if [[ $COUNT -gt 0 ]]; then
+                echo "  ⚠️ Found $COUNT outdated Go module(s)"
+                UPDATES_FOUND=$((UPDATES_FOUND + COUNT))
+                UPDATES_FILES="${UPDATES_FILES}go:${COUNT};"
+                echo "- **Go**: $COUNT module(s)" >> $GITHUB_STEP_SUMMARY
+              else
+                echo "  ✅ All Go modules up to date"
+              fi
+              rm -f go-updates
+            fi
+          fi
+          
+          echo "has_updates=$([[ $UPDATES_FOUND -gt 0 ]] && echo 'true' || echo 'false')" >> $GITHUB_OUTPUT
+          echo "updates_count=$UPDATES_FOUND" >> $GITHUB_OUTPUT
+          echo "updates_files=$UPDATES_FILES" >> $GITHUB_OUTPUT
+          
+          if [[ $UPDATES_FOUND -eq 0 ]]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "✅ **All dependencies up to date**" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Update dependencies
+        if: steps.check_dependencies.outputs.has_updates == 'true' && github.event.inputs.dry_run != 'true'
+        run: |
+          echo "## 🔄 Updating Dependencies" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Update npm
+          if [[ -f package.json ]] && command -v npm &>/dev/null; then
+            echo "⬆️ Updating npm packages to latest..."
+            npm update 2>/dev/null || true
+            npm outdated 2>/dev/null || echo "All up to date"
+          fi
+          
+          # Update pip
+          if [[ -f requirements.txt ]] && command -v pip &>/dev/null; then
+            echo "⬆️ Updating pip packages to latest..."
+            pip list --outdated --format=json 2>/dev/null | jq -r '.[] | .name' | xargs -n1 pip install -U 2>/dev/null || true
+            pip freeze > requirements.txt 2>/dev/null || true
+          fi
+          
+          # Update Go
+          if [[ -f go.mod ]] && command -v go &>/dev/null; then
+            echo "⬆️ Updating Go modules to latest..."
+            go get -u ./... 2>/dev/null || true
+            go mod tidy 2>/dev/null || true
+          fi
+          
+          echo "✅ Dependencies updated" >> $GITHUB_STEP_SUMMARY
+
+      - name: Create PR for dependency updates
+        if: steps.check_dependencies.outputs.has_updates == 'true' && github.event.inputs.dry_run != 'true'
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        run: |
+          # Check if there are changes
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "ℹ️ No dependency changes to commit"
+            exit 0
+          fi
+          
+          BRANCH_NAME="chore/update-dependencies-$(date +%Y%m%d-%H%M%S)"
+          git checkout -b "$BRANCH_NAME"
+          
+          git add -A
+          
+          UPDATES_COUNT="${{ steps.check_dependencies.outputs.updates_count }}"
+          git commit -m "chore: update $UPDATES_COUNT dependencies to latest" \
+            -m "Automated dependency updates." \
+            -m "See workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          
+          git push origin "$BRANCH_NAME"
+          
+          gh pr create \
+            --title "chore: Update $UPDATES_COUNT dependencies to latest" \
+            --body "## 📦 Automated Dependency Updates\n\nThis PR updates outdated dependencies to their latest versions.\n\n**Updated Files:** ${{ steps.check_dependencies.outputs.updates_files }}\n\n**Triggered by:** [Repository Update Workflow](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})\n\n**Review Checklist:**\n- Check CHANGELOG/release notes for breaking changes\n- Review major version bumps carefully\n- Run tests locally\n- Verify compatibility with existing code\n\nOnce approved, dependencies will be updated to latest stable versions." \
+            --base "${{ github.ref_name }}" \
+            --head "$BRANCH_NAME" \
+            --label "automated,dependencies"
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📝 **Pull request created** for dependency updates" >> $GITHUB_STEP_SUMMARY
+
+      - name: Cleanup stale branches
+        id: cleanup_branches
+        if: ${{ github.event.inputs.cleanup_branches != 'false' }}
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+          BRANCH_AGE_DAYS: ${{ github.event.inputs.branch_age_days || '5' }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+        run: |
+          echo "## 🧹 Stale Branch Cleanup" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          CUTOFF_DATE=$(date -d "$BRANCH_AGE_DAYS days ago" +%s)
+          DELETED=0
+          
+          # Get all merged branches (excluding main/master and protected branches)
+          gh api repos/${{ github.repository }}/branches --paginate | jq -r '.[] | select(.protected == false) | .name' | while read -r branch; do
+            # Skip main branches
+            if [[ "$branch" =~ ^(main|master|develop|production)$ ]]; then
+              continue
+            fi
+            
+            # Check if branch is merged
+            MERGE_STATUS=$(git branch -r --merged origin/${{ github.ref_name }} | grep -c "origin/$branch" || echo "0")
+            
+            if [[ $MERGE_STATUS -gt 0 ]]; then
+              # Get last commit date
+              LAST_COMMIT_DATE=$(git log -1 --format=%ct "origin/$branch" 2>/dev/null || echo "0")
+              
+              if [[ $LAST_COMMIT_DATE -lt $CUTOFF_DATE ]]; then
+                DAYS_OLD=$(( ($(date +%s) - LAST_COMMIT_DATE) / 86400 ))
+                echo "🗑️ Stale branch: $branch (merged $DAYS_OLD days ago)"
+                
+                if [[ "$DRY_RUN" != "true" ]]; then
+                  git push origin --delete "$branch" 2>/dev/null || true
+                  DELETED=$((DELETED + 1))
+                  echo "  ✅ Deleted"
+                else
+                  echo "  🔍 Would delete (dry-run)"
+                  DELETED=$((DELETED + 1))
+                fi
+                
+                echo "- \`$branch\` - $DAYS_OLD days old" >> $GITHUB_STEP_SUMMARY
+              fi
+            fi
+          done
+          
+          if [[ $DELETED -eq 0 ]]; then
+            echo "✅ **No stale branches found**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "🗑️ **$DELETED branch(es) cleaned up**" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Check stale issues and PRs
+        id: check_stale
+        if: ${{ github.event.inputs.check_stale_issues != 'false' }}
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+          STALE_DAYS: ${{ github.event.inputs.stale_days || '60' }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+        run: |
+          echo "## 📝 Stale Issues/PRs Check" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          CUTOFF_DATE=$(date -d "$STALE_DAYS days ago" --iso-8601)
+          COMMENTED=0
+          
+          # Check stale issues
+          echo "🔍 Checking stale issues..."
+          gh issue list --state open --json number,title,updatedAt --limit 100 | \
+            jq -r ".[] | select(.updatedAt < \"$CUTOFF_DATE\") | \"\(.number):\(.title)\"" | \
+            while IFS=':' read -r number title; do
+              echo "  ⚠️ Issue #$number is stale: $title"
+              
+              if [[ "$DRY_RUN" != "true" ]]; then
+                gh issue comment "$number" --body "This issue has been inactive for over $STALE_DAYS days. Please provide an update or it may be closed." 2>/dev/null || true
+                gh issue edit "$number" --add-label "stale" 2>/dev/null || true
+                COMMENTED=$((COMMENTED + 1))
+              else
+                COMMENTED=$((COMMENTED + 1))
+              fi
+              
+              echo "- Issue [#$number](${{ github.server_url }}/${{ github.repository }}/issues/$number): $title" >> $GITHUB_STEP_SUMMARY
+            done
+          
+          # Check stale PRs
+          echo "🔍 Checking stale PRs..."
+          gh pr list --state open --json number,title,updatedAt --limit 100 | \
+            jq -r ".[] | select(.updatedAt < \"$CUTOFF_DATE\") | \"\(.number):\(.title)\"" | \
+            while IFS=':' read -r number title; do
+              echo "  ⚠️ PR #$number is stale: $title"
+              
+              if [[ "$DRY_RUN" != "true" ]]; then
+                gh pr comment "$number" --body "This PR has been inactive for over $STALE_DAYS days. Please rebase and resolve conflicts, or it may be closed." 2>/dev/null || true
+                gh pr edit "$number" --add-label "stale" 2>/dev/null || true
+                COMMENTED=$((COMMENTED + 1))
+              else
+                COMMENTED=$((COMMENTED + 1))
+              fi
+              
+              echo "- PR [#$number](${{ github.server_url }}/${{ github.repository }}/pull/$number): $title" >> $GITHUB_STEP_SUMMARY
+            done
+          
+          if [[ $COMMENTED -eq 0 ]]; then
+            echo "✅ **No stale issues or PRs found**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "📌 **$COMMENTED item(s) marked as stale**" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Amend HEAD for serverless deployment
+        if: ${{ github.event.inputs.dummy_commit == 'true' && github.event.inputs.dry_run != 'true' }}
+        run: |
+          echo "## 🤖 Amending HEAD for Serverless Deployment" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Get original author date from HEAD
+          AUTHOR_DATE=$(git show -s --format=%aD HEAD)
+          
+          # Amend HEAD with preserved author date (gcda approach)
+          # This triggers deployments without changing the commit SHA
+          GIT_COMMITTER_DATE="$AUTHOR_DATE" git commit --amend --no-edit --date="$AUTHOR_DATE"
+          
+          git push --force-with-lease origin ${{ github.ref_name }}
+          
+          echo "✅ **HEAD amended for deployment** (no SHA change)" >> $GITHUB_STEP_SUMMARY
+          echo "- Original author date preserved" >> $GITHUB_STEP_SUMMARY
+          echo "- Push timestamp updated (triggers serverless)" >> $GITHUB_STEP_SUMMARY
+          echo "- Method: \`git commit --amend\` (gcda-style)" >> $GITHUB_STEP_SUMMARY
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Workflow Configuration" >> $GITHUB_STEP_SUMMARY
+          echo "- **Release check:** ${{ github.event.inputs.check_release != 'false' && '✅ Enabled' || '❌ Disabled' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Submodule check:** ${{ github.event.inputs.check_submodules != 'false' && '✅ Enabled' || '❌ Disabled' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Dependency check:** ${{ github.event.inputs.check_dependencies != 'false' && '✅ Enabled' || '❌ Disabled' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch cleanup:** ${{ github.event.inputs.cleanup_branches != 'false' && '✅ Enabled' || '❌ Disabled' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Stale check:** ${{ github.event.inputs.check_stale_issues != 'false' && '✅ Enabled' || '❌ Disabled' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Dummy commit:** ${{ github.event.inputs.dummy_commit == 'true' && '✅ Enabled' || '❌ Disabled' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Release threshold:** ${{ github.event.inputs.release_threshold || '5' }} commits" >> $GITHUB_STEP_SUMMARY
+          echo "- **Submodule threshold:** ${{ github.event.inputs.submodule_threshold || '5' }} commits" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch age:** ${{ github.event.inputs.branch_age_days || '5' }} days" >> $GITHUB_STEP_SUMMARY
+          echo "- **Stale threshold:** ${{ github.event.inputs.stale_days || '60' }} days" >> $GITHUB_STEP_SUMMARY
+          echo "- **Dry run:** ${{ github.event.inputs.dry_run == 'true' && '🔍 Yes' || '❌ No' }}" >> $GITHUB_STEP_SUMMARY

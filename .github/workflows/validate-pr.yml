@@ -65,14 +65,21 @@ jobs:
 
       - name: Save validation result
         if: steps.check.outputs.should_merge == 'true'
+        env:
+          PR_NUMBER: ${{ steps.check.outputs.pr_number }}
+          REASON: ${{ steps.check.outputs.reason }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          HEAD_LABEL: ${{ github.event.pull_request.head.label }}
+          TITLE: ${{ github.event.pull_request.title }}
         run: |
           mkdir -p ./pr-validation
-          echo "${{ steps.check.outputs.pr_number }}" > ./pr-validation/NUMBER
-          echo "${{ steps.check.outputs.reason }}" > ./pr-validation/REASON
-          echo "${{ github.event.pull_request.head.sha }}" > ./pr-validation/HEAD_SHA
-          echo "${{ github.event.pull_request.base.ref }}" > ./pr-validation/BASE_REF
-          echo "${{ github.event.pull_request.head.label }}" > ./pr-validation/HEAD_LABEL
-          echo "${{ github.event.pull_request.title }}" > ./pr-validation/TITLE
+          echo "$PR_NUMBER" > ./pr-validation/NUMBER
+          echo "$REASON" > ./pr-validation/REASON
+          echo "$HEAD_SHA" > ./pr-validation/HEAD_SHA
+          echo "$BASE_REF" > ./pr-validation/BASE_REF
+          echo "$HEAD_LABEL" > ./pr-validation/HEAD_LABEL
+          echo "$TITLE" > ./pr-validation/TITLE
 
       - name: Upload validation artifact
         if: steps.check.outputs.should_merge == 'true'
