@@ -148,7 +148,7 @@ jobs:
           token: ${{ steps.app_token.outputs.token }}
 
       - name: Setup bot identity
-        uses: XAOSTECH/dev-control/.github/actions/identity@main
+        uses: XAOSTECH/dev-control/.github/actions/identity@b067f72ca7f849b734a45634f23581a739d5146f # v2.0.0
         with:
           gpg-private-key: ${{ secrets['XB_GK'] }}
           gpg-passphrase: ${{ secrets['XB_GP'] }}
@@ -355,7 +355,7 @@ jobs:
       - name: Setup bot identity (for signing)
         id: import_gpg
         if: github.event_name == 'workflow_dispatch'
-        uses: XAOSTECH/dev-control/.github/actions/identity@main
+        uses: XAOSTECH/dev-control/.github/actions/identity@b067f72ca7f849b734a45634f23581a739d5146f # v2.0.0
         with:
           gpg-private-key: ${{ secrets['XB_GK'] }}
           gpg-passphrase: ${{ secrets['XB_GP'] }}
@@ -403,7 +403,7 @@ jobs:
           version: ${VERSION}
           description: "Version ${VERSION}"
           homepage: https://github.com/$GITHUB_REPOSITORY
-          license: GPL-3.0-or-later
+          licence: GPL-3.0-or-later
           entry_point: ./dc
           include:
             - scripts/
