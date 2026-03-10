@@ -72,7 +72,7 @@ setup_oauth() {
     local AUTH_URL="${AUTH_URI}?client_id=${CLIENT_ID}&redirect_uri=${REDIRECT_URI}&scope=${SCOPE}&response_type=code&access_type=offline&prompt=consent"
     
     echo "" >&2
-    log_info "Opening browser for authorization..."
+    log_info "Opening browser for authorisation..."
     log_info "If browser doesn't open, visit this URL manually:"
     echo "" >&2
     echo "$AUTH_URL" >&2
