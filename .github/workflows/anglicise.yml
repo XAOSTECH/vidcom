@@ -1,3 +1,6 @@
+# Template created by https://github.com/XAOSTECH/dev-control
+# See templates folder documentation for details.
+
 name: British English Spelling Check
 
 on:
@@ -16,13 +19,13 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Generate App Token
         id: app_token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v2
         with:
           app-id: ${{ secrets['XB_AI'] }}
           private-key: ${{ secrets['XB_PK'] }}
@@ -305,11 +308,28 @@ jobs:
             ! -path "./.git/*" \
             ! -path "./node_modules/*" \
             ! -path "./vendor/*" \
-            ! -path "./.github/workflows/*" \
+            ! -path "./.github/workflows/anglicise.yml" \
             ! -path "./workflows-templates/anglicise.yml" \
             ! -path "./licence-templates/*" \
-            ! -path "./LICENSE" \
+            ! -path "./LICENCE" \
             2>/dev/null | sort)
+
+          is_workflow_file() {
+            local file="$1"
+            [[ "$file" =~ ^\./\.github/workflows/.*\.ya?ml$ || "$file" =~ ^\./workflows-templates/.*\.ya?ml$ ]]
+          }
+
+          is_workflow_text_context() {
+            local line="$1"
+            [[ "$line" =~ ^[[:space:]]*# ]] ||
+            [[ "$line" =~ ^[[:space:]-]*name:[[:space:]] ]] ||
+            [[ "$line" =~ ^[[:space:]-]*(description|title|body):[[:space:]] ]]
+          }
+
+          is_excluded_text_line() {
+            local line="$1"
+            echo "$line" | grep -qE '(https?://|file://|github/|[?&](color|center|gray|licence)=[a-zA-Z0-9]+|"Authorization": "Bearer|types:[[:space:]]*\[[^]]+\]|--[a-z-]+ (center|color|gray)|\$\{?(color|center|gray);\}|\b(color|center|gray|licence)[_A-Z]*=|gum |\\$|shields\.io|stop-color|[a-z-]color[a-z-]*:|color[a-z-]*:[[:space:]]*#|align-items:)'
+          }
 
           echo "## British English Spelling Check" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -335,16 +355,23 @@ jobs:
               # - Gum/TUI library options
               # - Variable references ($color, ${color})
               # - Assignment patterns (color=, COLOR=) including query params
-              MATCHES=$(grep -inw "$american" "$file" 2>/dev/null | \
-                grep -vE '(https?://|file://|github/|[?&](color|center|gray|licence)=[a-zA-Z0-9]+|"Authorization": "Bearer|types:[[:space:]]*\[[^]]+\]|--[a-z-]+ (center|color|gray)|\$\{?(color|center|gray);}|\b(color|center|gray|licence)[_A-Z]*=|gum |\\$|shields\.io)' || true)
+              MATCHES=$(grep -inw "$american" "$file" 2>/dev/null || true)
               
               if [[ -n "$MATCHES" ]]; then
-                FILES_TO_FIX["$file"]=1
                 while IFS= read -r match; do
                   [[ -z "$match" ]] && continue
                   LINE_NUM=$(echo "$match" | cut -d: -f1)
-                  LINE_CONTENT=$(echo "$match" | cut -d: -f2- | sed 's/^[[:space:]]*//' | head -c 100)
-                  
+                  LINE_CONTENT=$(echo "$match" | cut -d: -f2-)
+
+                  if is_workflow_file "$file" && ! is_workflow_text_context "$LINE_CONTENT"; then
+                    continue
+                  fi
+
+                  if is_excluded_text_line "$LINE_CONTENT"; then
+                    continue
+                  fi
+
+                  FILES_TO_FIX["$file"]=1
                   echo "  ❌ $file:$LINE_NUM - '$american' → '$british'"
                   ISSUE_OUTPUT+="| \`$file:$LINE_NUM\` | $american | $british | $pattern |"$'\n'
                   ISSUES_FOUND=$((ISSUES_FOUND + 1))
@@ -390,11 +417,28 @@ jobs:
             ! -path "./.git/*" \
             ! -path "./node_modules/*" \
             ! -path "./vendor/*" \
-            ! -path "./.github/workflows/*" \
+            ! -path "./.github/workflows/anglicise.yml" \
             ! -path "./workflows-templates/anglicise.yml" \
             ! -path "./licence-templates/*" \
-            ! -path "./LICENSE" \
+            ! -path "./LICENCE" \
             2>/dev/null)
+
+          is_workflow_file() {
+            local file="$1"
+            [[ "$file" =~ ^\./\.github/workflows/.*\.ya?ml$ || "$file" =~ ^\./workflows-templates/.*\.ya?ml$ ]]
+          }
+
+          is_workflow_text_context() {
+            local line="$1"
+            [[ "$line" =~ ^[[:space:]]*# ]] ||
+            [[ "$line" =~ ^[[:space:]-]*name:[[:space:]] ]] ||
+            [[ "$line" =~ ^[[:space:]-]*(description|title|body):[[:space:]] ]]
+          }
+
+          is_excluded_text_line() {
+            local line="$1"
+            echo "$line" | grep -qE "(https?://|github/|[?&](color|center|gray|licence)=|=[\"'](center|color|licence)|types:[[:space:]]*\[[^]]+\]|--[a-z-]+ (center|color|gray)|--color|--center|\$\{?(color|center|gray|licence)|\b(COLOR|CENTER|GRAY|LICENCE)[_A-Z]*=|gum |\\$|shields\.io|stop-color|[a-z-]color[a-z-]*:|color[a-z-]*:[[:space:]]*#|align-items:)"
+          }
           
           FIXED_COUNT=0
           
@@ -419,7 +463,9 @@ jobs:
               # - Escaped line continuations (trailing backslash)
               # NOTE: filename exclusion is handled in the perl regex via (?!\.)
               # so that 'colors' in a comment is fixed even if 'colours.sh' appears on the same line
-              if echo "$line" | grep -qE "(https?://|github/|[?&](color|center|gray|licence)=|=[\"'](center|color|licence)|types:[[:space:]]*\[[^]]+\]|--[a-z-]+ (center|color|gray)|--color|--center|\$\{?(color|center|gray|licence)|\b(COLOR|CENTER|GRAY|LICENCE)[_A-Z]*=|gum |\\$|shields\.io)"; then
+              if is_workflow_file "$file" && ! is_workflow_text_context "$line"; then
+                echo "$line"
+              elif is_excluded_text_line "$line"; then
                 echo "$line"
               else
                 # Apply case-preserving replacement using perl
@@ -455,7 +501,21 @@ jobs:
               
               # Check if file contains the word (case-insensitive, whole word)
               # Exclude lines where the match is inside a code/CLI pattern (filename exclusion handled by perl (?!\.))
-              if grep -inw "$american" "$file" 2>/dev/null | grep -qvE "(https?://|file://|github/|[?&](color|center|gray|licence)=[a-zA-Z0-9]+|\"Authorization\": \"Bearer|types:[[:space:]]*\[[^]]+\]|=[\"'](center|color|licence)|--[a-z-]+ (center|color|gray)|--color|--center|\$\{?(color|center|gray|licence)|\b(COLOR|CENTER|GRAY|LICENCE)[_A-Z]*|gum |\\$|shields\.io)"; then
+              SHOULD_FIX=false
+              while IFS= read -r match; do
+                [[ -z "$match" ]] && continue
+                MATCH_LINE=$(echo "$match" | cut -d: -f2-)
+                if is_workflow_file "$file" && ! is_workflow_text_context "$MATCH_LINE"; then
+                  continue
+                fi
+                if is_excluded_text_line "$MATCH_LINE"; then
+                  continue
+                fi
+                SHOULD_FIX=true
+                break
+              done < <(grep -inw "$american" "$file" 2>/dev/null || true)
+
+              if [[ "$SHOULD_FIX" == true ]]; then
                 case_preserve_replace "$file" "$american" "$british"
                 echo "  ✓ Fixed in: $file"
                 FIXED_COUNT=$((FIXED_COUNT + 1))
@@ -464,6 +524,23 @@ jobs:
           done <<< "$WORD_PAIRS"
           
           echo "✅ Applied fixes to $FIXED_COUNT file(s)"
+
+      - name: Validate workflow identifiers remain canonical
+        if: steps.check.outputs.needs_fix == 'true'
+        run: |
+          set -euo pipefail
+          BAD=0
+          for file in .github/workflows/*.yml workflows-templates/*.yml; do
+            [[ -f "$file" ]] || continue
+            if grep -nE '^[[:space:]]*analyse:[[:space:]]*$|needs:[[:space:]]*\[[^]]*\banalyse\b[^]]*\]|uses:[[:space:]]+[^[:space:]]+/analyse@' "$file"; then
+              BAD=1
+            fi
+          done
+          if [[ "$BAD" -ne 0 ]]; then
+            echo "❌ Found UK spelling in workflow functional identifiers; aborting."
+            exit 1
+          fi
+          echo "✅ Workflow functional identifiers remain canonical."
 
       - name: Setup bot identity (if fixes needed)
         id: import_gpg

@@ -1,3 +1,6 @@
+# Template created by https://github.com/XAOSTECH/dev-control
+# See templates folder documentation for details.
+
 name: Validate PR for Automerge
 
 # UNPRIVILEGED workflow - runs in untrusted PR context

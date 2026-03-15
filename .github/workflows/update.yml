@@ -1,3 +1,6 @@
+# Template created by https://github.com/XAOSTECH/dev-control
+# See templates folder documentation for details.
+
 # ============================================================================
 # Repository Update Workflow Template (update.yml)
 # ============================================================================
@@ -11,7 +14,7 @@
 # Automates repository maintenance tasks including:
 #   - Detecting accumulated changes and auto-triggering releases
 #   - Updating submodules that have fallen behind
-#   - Keeping monorepo dependencies synchronized
+#   - Keeping monorepo dependencies synchronised
 #
 # TRIGGERS:
 #   - Schedule: Weekly on Monday at 00:00 UTC
@@ -105,12 +108,22 @@ on:
         description: 'Days of inactivity to consider issue/PR stale'
         required: false
         type: number
-        default: 60
+        default: 10
       dummy_commit:
         description: 'Amend HEAD for serverless deployment (gcda-style, no SHA change)'
         required: false
         type: boolean
         default: false
+      update_tree_viz:
+        description: 'Regenerate git tree visualisation if threshold met'
+        required: false
+        type: boolean
+        default: true
+      tree_viz_threshold:
+        description: 'Minimum new commits since last tree-viz to regenerate'
+        required: false
+        type: number
+        default: 30
 
 permissions:
   contents: write
@@ -130,13 +143,13 @@ jobs:
     steps:
       - name: Generate App Token
         id: app_token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v2
         with:
           app-id: ${{ secrets['XB_AI'] }}
           private-key: ${{ secrets['XB_PK'] }}
 
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0  # Full history for commit counting
           submodules: recursive
@@ -227,6 +240,14 @@ jobs:
           echo "## 📦 Submodule Check" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
+          # For manual (workflow_dispatch) runs, override threshold to 0 so all
+          # behind submodules are flagged regardless of how far behind they are.
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            EFFECTIVE_THRESHOLD=0
+          else
+            EFFECTIVE_THRESHOLD=$SUBMODULE_THRESHOLD
+          fi
+          
           # Check if .gitmodules exists
           if [[ ! -f .gitmodules ]]; then
             echo "ℹ️ No submodules found in repository"
@@ -238,8 +259,8 @@ jobs:
           UPDATES_NEEDED=0
           UPDATES_LIST=""
           
-          # Parse submodules
-          git config --file .gitmodules --get-regexp '^submodule\..*\.path$' | while read -r key path; do
+          # Parse submodules (process substitution avoids subshell variable scope loss)
+          while read -r key path; do
             name=$(echo "$key" | sed 's/^submodule\.\(.*\)\.path$/\1/')
             url=$(git config --file .gitmodules --get "submodule.$name.url" || echo "")
             branch=$(git config --file .gitmodules --get "submodule.$name.branch" || echo "main")
@@ -261,11 +282,24 @@ jobs:
             fi
             
             # Fetch latest from remote
-            git fetch origin "$branch" --quiet 2>/dev/null || true
+            # Fetch latest from remote — try configured branch then common fallbacks
+            RESOLVED_BRANCH=""
+            for try_branch in "$branch" main Main master Master; do
+              if git fetch origin "$try_branch" --quiet 2>/dev/null; then
+                RESOLVED_BRANCH="$try_branch"
+                break
+              fi
+            done
+            if [[ -z "$RESOLVED_BRANCH" ]]; then
+              echo "  ⚠️ Failed to fetch any branch for $name — skipping"
+              cd "$GITHUB_WORKSPACE"
+              continue
+            fi
+            branch="$RESOLVED_BRANCH"
             LATEST_COMMIT=$(git rev-parse "origin/$branch" 2>/dev/null || echo "")
             
             if [[ -z "$LATEST_COMMIT" ]]; then
-              echo "  ⚠️ Failed to fetch remote branch: $branch"
+              echo "  ⚠️ Failed to resolve remote branch: $branch"
               cd "$GITHUB_WORKSPACE"
               continue
             fi
@@ -274,8 +308,8 @@ jobs:
             if [[ "$CURRENT_COMMIT" != "$LATEST_COMMIT" ]]; then
               COMMITS_BEHIND=$(git rev-list --count "${CURRENT_COMMIT}..${LATEST_COMMIT}" 2>/dev/null || echo "0")
               
-              if [[ $COMMITS_BEHIND -ge $SUBMODULE_THRESHOLD ]]; then
-                echo "  ⚠️ $COMMITS_BEHIND commits behind (threshold: $SUBMODULE_THRESHOLD)"
+              if [[ $COMMITS_BEHIND -ge $EFFECTIVE_THRESHOLD ]]; then
+                echo "  ⚠️ $COMMITS_BEHIND commits behind (threshold: $EFFECTIVE_THRESHOLD)"
                 UPDATES_NEEDED=$((UPDATES_NEEDED + 1))
                 UPDATES_LIST="${UPDATES_LIST}${name}:${path}:${COMMITS_BEHIND};"
               else
@@ -286,7 +320,7 @@ jobs:
             fi
             
             cd "$GITHUB_WORKSPACE"
-          done
+          done < <(git config --file .gitmodules --get-regexp '^submodule\..*\.path$')
           
           echo "updates_needed=$UPDATES_NEEDED" >> $GITHUB_OUTPUT
           echo "updates_list=$UPDATES_LIST" >> $GITHUB_OUTPUT
@@ -320,17 +354,34 @@ jobs:
             cd "$path"
             
             # Get branch to update to
-            branch=$(git config --file "$GITHUB_WORKSPACE/.gitmodules" --get "submodule.$name.branch" || echo "main")
+            # Get branch to update to — try configured branch then common fallbacks
+            branch=$(git config --file "$GITHUB_WORKSPACE/.gitmodules" --get "submodule.$name.branch" 2>/dev/null || echo "main")
+            RESOLVED_BRANCH=""
+            for try_branch in "$branch" main Main master Master; do
+              if git fetch origin "$try_branch" --quiet 2>/dev/null; then
+                RESOLVED_BRANCH="$try_branch"
+                break
+              fi
+            done
+            if [[ -z "$RESOLVED_BRANCH" ]]; then
+              echo "  ⚠️ Could not fetch any branch for $name — skipping"
+              echo "- ⚠️ **$name**: skipped (no fetchable branch)" >> $GITHUB_STEP_SUMMARY
+              cd "$GITHUB_WORKSPACE"
+              continue
+            fi
             
-            # Update to latest
-            git fetch origin "$branch" --quiet
-            git checkout "origin/$branch" --quiet
+            if ! git checkout "origin/$RESOLVED_BRANCH" --quiet 2>/dev/null; then
+              echo "  ⚠️ checkout failed for $name — skipping"
+              echo "- ⚠️ **$name**: skipped (checkout failed)" >> $GITHUB_STEP_SUMMARY
+              cd "$GITHUB_WORKSPACE"
+              continue
+            fi
             
             cd "$GITHUB_WORKSPACE"
           done
           
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "✅ Submodules updated successfully" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Submodules update complete" >> $GITHUB_STEP_SUMMARY
 
       - name: Create Pull Request
         if: steps.check_submodules.outputs.has_updates == 'true' && github.event.inputs.dry_run != 'true'
@@ -358,13 +409,19 @@ jobs:
           
           git push origin "$BRANCH_NAME"
           
+          # Ensure automerge label exists before creating PR
+          gh label create automerge \
+            --description "Automatically merge this PR" \
+            --color "3BEF67" \
+            2>/dev/null || true
+          
           # Create PR
           gh pr create \
             --title "chore: Update ${UPDATES_COUNT} submodule(s) to latest" \
             --body "## 🔄 Automated Submodule Update\n\nThis PR updates submodules that have fallen behind by 5 or more commits.\n\n**Updated Submodules:** ${{ steps.check_submodules.outputs.updates_list }}\n\n**Triggered by:** [Repository Update Workflow](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})\n\n**What to Check:**\n- Review each submodule's changes between old and new commit\n- Ensure no breaking changes were introduced\n- Verify monorepo compatibility\n- Run tests locally if needed\n\nOnce approved, this will bring submodules up to date with their respective main branches." \
             --base "${{ github.ref_name }}" \
             --head "$BRANCH_NAME" \
-            --label "automated,dependencies,submodules"
+            --label "automerge"
           
           echo "✅ Pull request created successfully"
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -499,12 +556,18 @@ jobs:
           
           git push origin "$BRANCH_NAME"
           
+          # Ensure automerge label exists before creating PR
+          gh label create automerge \
+            --description "Automatically merge this PR" \
+            --color "3BEF67" \
+            2>/dev/null || true
+          
           gh pr create \
             --title "chore: Update $UPDATES_COUNT dependencies to latest" \
             --body "## 📦 Automated Dependency Updates\n\nThis PR updates outdated dependencies to their latest versions.\n\n**Updated Files:** ${{ steps.check_dependencies.outputs.updates_files }}\n\n**Triggered by:** [Repository Update Workflow](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})\n\n**Review Checklist:**\n- Check CHANGELOG/release notes for breaking changes\n- Review major version bumps carefully\n- Run tests locally\n- Verify compatibility with existing code\n\nOnce approved, dependencies will be updated to latest stable versions." \
             --base "${{ github.ref_name }}" \
             --head "$BRANCH_NAME" \
-            --label "automated,dependencies"
+            --label "automerge"
           
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "📝 **Pull request created** for dependency updates" >> $GITHUB_STEP_SUMMARY
@@ -567,7 +630,7 @@ jobs:
         if: ${{ github.event.inputs.check_stale_issues != 'false' }}
         env:
           GH_TOKEN: ${{ steps.app_token.outputs.token }}
-          STALE_DAYS: ${{ github.event.inputs.stale_days || '60' }}
+          STALE_DAYS: ${{ github.event.inputs.stale_days || '10' }}
           DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
         run: |
           echo "## 📝 Stale Issues/PRs Check" >> $GITHUB_STEP_SUMMARY
@@ -619,6 +682,36 @@ jobs:
             echo "📌 **$COMMENTED item(s) marked as stale**" >> $GITHUB_STEP_SUMMARY
           fi
 
+      - name: Check and trigger tree visualization
+        id: check_tree_viz
+        if: ${{ github.event.inputs.update_tree_viz != 'false' && github.event.inputs.dry_run != 'true' }}
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+          TREE_VIZ_THRESHOLD: ${{ github.event.inputs.tree_viz_threshold || '30' }}
+        run: |
+          echo "## 🌳 Tree Visualization Check" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Find the last tree-viz commit
+          LAST_VIZ_SHA=$(git log --all --oneline --format='%H' -- '.github/tree-viz/' | head -1 || echo "")
+
+          if [[ -z "$LAST_VIZ_SHA" ]]; then
+            COMMITS_SINCE=999
+            echo "ℹ️ No previous tree-viz found — will generate" | tee -a $GITHUB_STEP_SUMMARY
+          else
+            COMMITS_SINCE=$(git rev-list --count "${LAST_VIZ_SHA}..HEAD" 2>/dev/null || echo "0")
+            echo "📊 Commits since last tree-viz: $COMMITS_SINCE (threshold: $TREE_VIZ_THRESHOLD)" | tee -a $GITHUB_STEP_SUMMARY
+          fi
+
+          if [[ $COMMITS_SINCE -ge $TREE_VIZ_THRESHOLD ]]; then
+            echo "✅ Threshold met — triggering tree-viz workflow" | tee -a $GITHUB_STEP_SUMMARY
+            gh workflow run tree-viz.yml --ref ${{ github.ref_name }}
+            echo "triggered=true" >> $GITHUB_OUTPUT
+          else
+            echo "ℹ️ Below threshold — skipping ($COMMITS_SINCE < $TREE_VIZ_THRESHOLD)" | tee -a $GITHUB_STEP_SUMMARY
+            echo "triggered=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Amend HEAD for serverless deployment
         if: ${{ github.event.inputs.dummy_commit == 'true' && github.event.inputs.dry_run != 'true' }}
         run: |
@@ -652,8 +745,10 @@ jobs:
           echo "- **Branch cleanup:** ${{ github.event.inputs.cleanup_branches != 'false' && '✅ Enabled' || '❌ Disabled' }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Stale check:** ${{ github.event.inputs.check_stale_issues != 'false' && '✅ Enabled' || '❌ Disabled' }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Dummy commit:** ${{ github.event.inputs.dummy_commit == 'true' && '✅ Enabled' || '❌ Disabled' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tree viz:** ${{ github.event.inputs.update_tree_viz != 'false' && '✅ Enabled' || '❌ Disabled' }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Release threshold:** ${{ github.event.inputs.release_threshold || '5' }} commits" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tree viz threshold:** ${{ github.event.inputs.tree_viz_threshold || '30' }} commits" >> $GITHUB_STEP_SUMMARY
           echo "- **Submodule threshold:** ${{ github.event.inputs.submodule_threshold || '5' }} commits" >> $GITHUB_STEP_SUMMARY
           echo "- **Branch age:** ${{ github.event.inputs.branch_age_days || '5' }} days" >> $GITHUB_STEP_SUMMARY
-          echo "- **Stale threshold:** ${{ github.event.inputs.stale_days || '60' }} days" >> $GITHUB_STEP_SUMMARY
+          echo "- **Stale threshold:** ${{ github.event.inputs.stale_days || '10' }} days" >> $GITHUB_STEP_SUMMARY
           echo "- **Dry run:** ${{ github.event.inputs.dry_run == 'true' && '🔍 Yes' || '❌ No' }}" >> $GITHUB_STEP_SUMMARY

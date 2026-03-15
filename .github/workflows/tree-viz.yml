@@ -1,0 +1,162 @@
+# Template created by https://github.com/XAOSTECH/dev-control
+# See templates folder documentation for details.
+
+# ============================================================================
+# Git Tree Visualization Workflow Template (tree-viz.yml)
+# ============================================================================
+#
+# ORIGIN: https://github.com/XAOSTECH/dev-control
+# This workflow template is part of the dev-control toolkit.
+# See: https://github.com/XAOSTECH/dev-control/blob/main/workflows-templates/
+#
+# ============================================================================
+#
+# Generates an interactive HTML visualisation of the repository's git tree.
+# Produces a fractal-style tree with waving leaves, showing commits, branches,
+# merges, and tags in an animated, scrollable canvas.
+#
+# TRIGGERS:
+#   - Manual dispatch (workflow_dispatch)
+#   - Called by other workflows (workflow_call) e.g. update.yml
+#
+# WHAT IT DOES:
+#   1. Checks out the full git history
+#   2. Extracts commit data, branch info, and tags into JSON
+#   3. Calculates organic tree layout positions
+#   4. Renders interactive HTML with Canvas animations
+#   5. Optionally renders static SVG for README embedding
+#   6. Commits generated artefacts to .github/tree-viz/
+#
+# CONFIGURATION:
+#   - max_commits: Maximum number of commits to visualise (default: 500)
+#   - generate_svg: Whether to also produce a static SVG (default: true)
+#   - embed_readme: Whether to auto-inject SVG into README.md (default: true)
+#
+# ============================================================================
+
+name: Git Tree Visualization
+
+on:
+  workflow_dispatch:
+    inputs:
+      max_commits:
+        description: 'Maximum commits to include in visualisation'
+        required: false
+        type: number
+        default: 500
+      generate_svg:
+        description: 'Generate static SVG alongside HTML'
+        required: false
+        type: boolean
+        default: true
+      embed_readme:
+        description: 'Auto-embed SVG into README.md'
+        required: false
+        type: boolean
+        default: true
+  workflow_call:
+    inputs:
+      max_commits:
+        description: 'Maximum commits to include'
+        required: false
+        type: number
+        default: 500
+      generate_svg:
+        description: 'Generate static SVG'
+        required: false
+        type: boolean
+        default: true
+      embed_readme:
+        description: 'Auto-embed SVG into README'
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  generate-tree:
+    name: Generate Git Tree Visualization
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Generate App Token
+        id: app_token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets['XB_AI'] }}
+          private-key: ${{ secrets['XB_PK'] }}
+
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ steps.app_token.outputs.token }}
+
+      - name: Setup bot identity
+        uses: XAOSTECH/dev-control/.github/actions/identity@b067f72ca7f849b734a45634f23581a739d5146f # v2.0.0
+        with:
+          gpg-private-key: ${{ secrets['XB_GK'] }}
+          gpg-passphrase: ${{ secrets['XB_GP'] }}
+          user-token: ${{ secrets['XB_UT'] }}
+          bot-name: ${{ vars.BOT_NAME || 'xaos-bot' }}
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -yqq jq
+
+      - name: Checkout dev-control
+        uses: actions/checkout@v6
+        with:
+          repository: XAOSTECH/dev-control
+          path: .dev-control
+          sparse-checkout: |
+            scripts/lib/git/tree-viz.sh
+            scripts/lib/git/tree-layout.sh
+            scripts/lib/git/tree-render-html.sh
+            scripts/lib/git/tree-render-svg.sh
+            scripts/lib/colours.sh
+            scripts/lib/print.sh
+            scripts/create-tree.sh
+
+      - name: Generate tree visualization
+        env:
+          MAX_COMMITS: ${{ inputs.max_commits || 500 }}
+          GENERATE_SVG: ${{ inputs.generate_svg && '--svg-only' || '' }}
+          EMBED_README: ${{ inputs.embed_readme }}
+        run: |
+          cd "$GITHUB_WORKSPACE"
+
+          # Build args
+          ARGS=("--max-commits" "$MAX_COMMITS" "--output-dir" ".github/tree-viz")
+          [[ "$EMBED_README" != "true" ]] && ARGS+=("--no-embed")
+
+          bash .dev-control/scripts/create-tree.sh "${ARGS[@]}"
+
+      - name: Commit and push
+        run: |
+          cd "$GITHUB_WORKSPACE"
+
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "ℹ️ No changes to commit"
+            exit 0
+          fi
+
+          git add .github/tree-viz/ README.md docs/README.md 2>/dev/null || true
+          git commit -m "chore: update git tree visualisation" \
+            -m "Auto-generated by tree-viz workflow" \
+            -m "See: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          git push
+
+          echo "## 🌳 Tree Visualization Updated" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Generated files:" >> $GITHUB_STEP_SUMMARY
+          echo "- \`.github/tree-viz/git-tree.html\` (interactive)" >> $GITHUB_STEP_SUMMARY
+          echo "- \`.github/tree-viz/git-tree-data.json\` (data)" >> $GITHUB_STEP_SUMMARY
+          echo "- \`.github/tree-viz/git-tree.svg\` (static)" >> $GITHUB_STEP_SUMMARY
+
+      - name: Cleanup dev-control checkout
+        if: always()
+        run: rm -rf .dev-control

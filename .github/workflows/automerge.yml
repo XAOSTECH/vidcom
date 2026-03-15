@@ -1,3 +1,6 @@
+# Template created by https://github.com/XAOSTECH/dev-control
+# See templates folder documentation for details.
+
 name: Automerge
 
 # PRIVILEGED workflow - runs with write permissions after validation
@@ -210,135 +213,65 @@ jobs:
     steps:
       - name: Generate App Token
         id: app_token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v2
         with:
           app-id: ${{ secrets.XB_AI }}
           private-key: ${{ secrets.XB_PK }}
       
-      - name: Checkout base branch
-        uses: actions/checkout@v4
-        with:
-          # Shallow clone - automerge only needs base ref, not PR history
-          # Reduces attack surface by not fetching untrusted PR commits
-          fetch-depth: 1
-          token: ${{ steps.app_token.outputs.token }}
-
-      - name: Setup bot identity
-        id: identity
-        uses: ./.github/actions/identity
-        with:
-          gpg-private-key: ${{ secrets.XB_GK }}
-          gpg-passphrase: ${{ secrets.XB_GP }}
-          user-token: ${{ secrets.XB_UT }}
-          bot-name: ${{ vars.BOT_NAME || 'xaos-bot' }}
-
-      - name: Merge PR from workflow_run (validated via artifact)
-        if: |
-          steps.identity.outputs.gpg-outcome == 'success' && 
-          needs.verify.outputs.should_merge == 'true'
-        env:
-          PR_NUMBER: ${{ needs.verify.outputs.pr_number }}
-          HEAD_SHA: ${{ needs.verify.outputs.head_sha }}
-          BASE_REF: ${{ needs.verify.outputs.base_ref }}
-          HEAD_LABEL: ${{ needs.verify.outputs.head_label }}
-          PR_TITLE: ${{ needs.verify.outputs.pr_title }}
-          GH_TOKEN: ${{ steps.app_token.outputs.token }}
-        run: |
-          set -euo pipefail
-          echo "🔀 Merging PR #${PR_NUMBER} with signed commit"
-          
-          git fetch origin "$BASE_REF"
-          git checkout -B "$BASE_REF" "origin/$BASE_REF"
-          # codeql[actions/untrusted-checkout/high]: False positive - PR pre-verified by guard job.
-          # Guard validates author (xaos-bot or approved contributor), labels (automerge), and approval.
-          # This fetch/merge only executes AFTER successful verification. No untrusted code execution.
-          git fetch origin "pull/${PR_NUMBER}/head":"refs/remotes/pr/${PR_NUMBER}"
-
-          # Create GitHub-style merge message
-          MERGE_MSG="Merge pull request #${PR_NUMBER} from ${HEAD_LABEL}\n\n${PR_TITLE}"
-
-          if ! git merge --no-ff -m "$MERGE_MSG" "refs/remotes/pr/${PR_NUMBER}"; then
-            echo "❌ Merge conflict for PR #${PR_NUMBER}. Aborting."
-            git merge --abort || true
-            exit 1
-          fi
-
-          git push origin "$BASE_REF"
-          echo "✅ Merged PR #${PR_NUMBER} successfully"
-
-      - name: Merge PRs from manual/anglicise (legacy guard path)
-        if: |
-          steps.identity.outputs.gpg-outcome == 'success' && 
-          needs.guard.outputs.should_merge == 'true'
-        env:
-          PR_NUMBERS: ${{ needs.guard.outputs.pr_numbers }}
-          GH_TOKEN: ${{ steps.app_token.outputs.token }}
-        run: |
-          set -euo pipefail
-          pr_numbers=$(echo "$PR_NUMBERS" | tr -d '[]' | tr ',' ' ')
-          for pr_number in $pr_numbers; do
-            echo "🔀 Merging PR #${pr_number} with signed commit"
-            pr_json=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr_number}")
-            base_ref=$(echo "$pr_json" | jq -r '.base.ref')
-            head_sha=$(echo "$pr_json" | jq -r '.head.sha')
-            pr_title=$(echo "$pr_json" | jq -r '.title')
-            pr_branch=$(echo "$pr_json" | jq -r '.head.label')
-
-            git fetch origin "$base_ref"
-            git checkout -B "$base_ref" "origin/$base_ref"
-            # codeql[actions/untrusted-checkout/high]: False positive - PR pre-verified by guard job.
-            # Guard validates author (xaos-bot or approved contributor), required labels (automerge),
-            # and approval status. This fetch/merge only executes AFTER successful validation.
-            # No untrusted code runs - we merge verified commits with GPG signature for traceability.
-            git fetch origin "pull/${pr_number}/head":"refs/remotes/pr/${pr_number}"
-
-            # Create GitHub-style merge message
-            MERGE_MSG="Merge pull request #${pr_number} from ${pr_branch}\n\n${pr_title}"
-
-            if ! git merge --no-ff -m "$MERGE_MSG" "refs/remotes/pr/${pr_number}"; then
-              echo "❌ Merge conflict for PR #${pr_number}. Aborting."
-              git merge --abort || true
-              exit 1
-            fi
-
-            if ! git log -1 --pretty=%B | grep -q "${head_sha}"; then
-              echo "ℹ️ Merge commit created; pushing to ${base_ref}"
-            fi
-
-            git push origin "$base_ref"
-          done
-
-      - name: Merge via API (fallback - no GPG signature)
-        if: |
-          steps.identity.outputs.gpg-outcome != 'success' && 
-          (needs.verify.outputs.should_merge == 'true' || needs.guard.outputs.should_merge == 'true')
+      - name: Merge PR from workflow_run via API (safe privileged path)
+        if: needs.verify.outputs.should_merge == 'true'
         uses: actions/github-script@v7
         env:
           PR_NUMBER_SINGLE: ${{ needs.verify.outputs.pr_number }}
+          EXPECTED_HEAD_SHA: ${{ needs.verify.outputs.head_sha }}
+        with:
+          github-token: ${{ steps.app_token.outputs.token }}
+          script: |
+            const { owner, repo } = context.repo;
+            const prNumber = parseInt(process.env.PR_NUMBER_SINGLE || '', 10);
+            const expectedHead = process.env.EXPECTED_HEAD_SHA;
+            if (!Number.isInteger(prNumber)) {
+              core.setFailed('Invalid PR number from validation artifact');
+              return;
+            }
+            const pr = await github.rest.pulls.get({ owner, repo, pull_number: prNumber });
+            if (expectedHead && pr.data.head.sha !== expectedHead) {
+              core.setFailed(`Head SHA changed for PR #${prNumber}; expected ${expectedHead}, got ${pr.data.head.sha}`);
+              return;
+            }
+            await github.rest.pulls.merge({
+              owner,
+              repo,
+              pull_number: prNumber,
+              sha: pr.data.head.sha,
+              merge_method: 'merge',
+              commit_title: `Merge pull request #${prNumber} from ${pr.data.head.label}`,
+              commit_message: pr.data.title,
+            });
+            core.info(`✅ Merged PR #${prNumber} via workflow_run artifact validation`);
+      - name: Merge PRs from manual/anglicise via API (safe path)
+        if: needs.guard.outputs.should_merge == 'true'
+        uses: actions/github-script@v7
+        env:
           PR_NUMBERS_MULTI: ${{ needs.guard.outputs.pr_numbers }}
         with:
           github-token: ${{ steps.app_token.outputs.token }}
           script: |
             const { owner, repo } = context.repo;
-            let prNumbers = [];
-            
-            // Handle single PR from workflow_run
-            if (process.env.PR_NUMBER_SINGLE) {
-              prNumbers.push(parseInt(process.env.PR_NUMBER_SINGLE, 10));
-            }
-            
-            // Handle multiple PRs from manual/anglicise
-            if (process.env.PR_NUMBERS_MULTI) {
-              const multi = JSON.parse(process.env.PR_NUMBERS_MULTI || '[]');
-              prNumbers.push(...multi);
-            }
-            
-            for (const prNumber of prNumbers) {
-              try {
-                await github.rest.pulls.merge({ owner, repo, pull_number: prNumber });
-                core.info(`✅ Merged PR #${prNumber} via API fallback`);
-              } catch (error) {
-                core.setFailed(`❌ Failed to merge PR #${prNumber}: ${error.message}`);
-              }
+            const prNumbers = JSON.parse(process.env.PR_NUMBERS_MULTI || '[]');
+            for (const raw of prNumbers) {
+              const prNumber = parseInt(String(raw), 10);
+              if (!Number.isInteger(prNumber)) continue;
+              const pr = await github.rest.pulls.get({ owner, repo, pull_number: prNumber });
+              await github.rest.pulls.merge({
+                owner,
+                repo,
+                pull_number: prNumber,
+                sha: pr.data.head.sha,
+                merge_method: 'merge',
+                commit_title: `Merge pull request #${prNumber} from ${pr.data.head.label}`,
+                commit_message: pr.data.title,
+              });
+              core.info(`✅ Merged PR #${prNumber} via guarded manual path`);
             }
 
