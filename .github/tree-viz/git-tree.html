@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Git Tree Visualization</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background: linear-gradient(160deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            color: #e0e0e0;
+        }
+
+        .container {
+            background: rgba(15, 15, 35, 0.85);
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 40px rgba(100, 60, 200, 0.15);
+            padding: 30px;
+            max-width: 95vw;
+            width: 100%;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(100, 100, 200, 0.15);
+        }
+
+        h1 {
+            color: #c0a0ff;
+            margin-bottom: 8px;
+            font-size: 28px;
+            text-shadow: 0 0 20px rgba(160, 100, 255, 0.4);
+        }
+
+        .info {
+            color: #8888aa;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+
+        .canvas-viewport {
+            position: relative;
+            width: 100%;
+            overflow: auto;
+            border: 1px solid rgba(100, 100, 200, 0.2);
+            border-radius: 8px;
+            background: #0a0a1a;
+            max-height: 85vh;
+        }
+
+        #treeCanvas {
+            display: block;
+            cursor: crosshair;
+        }
+
+        #tooltip {
+            position: fixed;
+            background: rgba(20, 10, 40, 0.96);
+            color: white;
+            padding: 14px 18px;
+            border-radius: 10px;
+            font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+            font-size: 12px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.15s ease;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.6), 0 0 12px rgba(120, 80, 200, 0.3);
+            max-width: 420px;
+            z-index: 1000;
+            border: 1px solid rgba(140, 100, 240, 0.3);
+        }
+
+        #tooltip.visible { opacity: 1; }
+
+        .tooltip-sha {
+            color: #60a5fa;
+            font-weight: bold;
+            margin-bottom: 6px;
+            font-size: 13px;
+        }
+        .tooltip-msg {
+            color: #e2e8f0;
+            margin-bottom: 6px;
+            line-height: 1.4;
+            word-break: break-word;
+        }
+        .tooltip-author {
+            color: #a78bfa;
+            font-size: 11px;
+            margin-bottom: 4px;
+        }
+        .tooltip-date {
+            color: #64748b;
+            font-size: 10px;
+        }
+        .tooltip-refs {
+            color: #34d399;
+            font-size: 11px;
+            margin-top: 4px;
+            font-weight: bold;
+        }
+
+        .controls {
+            margin-top: 15px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        button {
+            padding: 8px 16px;
+            background: rgba(80, 50, 160, 0.6);
+            color: #c0b0e8;
+            border: 1px solid rgba(120, 80, 220, 0.4);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+        button:hover {
+            background: rgba(100, 60, 200, 0.8);
+            color: white;
+            box-shadow: 0 0 12px rgba(120, 80, 220, 0.4);
+        }
+
+        .stats {
+            margin-left: auto;
+            font-size: 12px;
+            color: #6b6b8a;
+        }
+
+        .wind-slider-label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            color: #c0b0e8;
+        }
+        .wind-slider-label input[type="range"] {
+            width: 100px;
+            accent-color: #7c3aed;
+        }
+        #windVal {
+            min-width: 3.5em;
+            text-align: right;
+            font-size: 11px;
+            color: #8888aa;
+        }
+
+        .legend {
+            display: flex;
+            gap: 16px;
+            margin-top: 12px;
+            flex-wrap: wrap;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: #8888aa;
+        }
+        .legend-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌳 Git Tree Visualization</h1>
+        <p class="info">Hover over leaves to see commit details · Click to highlight ancestry · Ctrl+click to open commit page · Scroll to explore</p>
+
+        <div class="canvas-viewport" id="viewport">
+            <canvas id="treeCanvas" width="1200" height="940"></canvas>
+        </div>
+
+        <div class="controls">
+            <button onclick="toggleAnimation()">⏯ Animation</button>
+            <button onclick="toggleWind()">🌬 Wind</button>
+            <label class="wind-slider-label" title="Wind intensity">🍃 <input type="range" id="windSlider" min="0" max="500" value="100" oninput="updateWindIntensity(this.value)"><span id="windVal">100%</span></label>
+            <button onclick="resetView()">↺ Reset</button>
+            <span class="stats" id="stats"></span>
+        </div>
+
+        <div class="legend">
+            <div class="legend-item"><span class="legend-dot" style="background:#4ade80"></span> Commit</div>
+            <div class="legend-item"><span class="legend-dot" style="background:#c084fc"></span> Merge</div>
+            <div class="legend-item"><span class="legend-dot" style="background:#fb923c"></span> Fork point</div>
+            <div class="legend-item"><span class="legend-dot" style="background:#38bdf8"></span> Tagged</div>
+        </div>
+    </div>
+
+    <div id="tooltip">
+        <div class="tooltip-sha"></div>
+        <div class="tooltip-msg"></div>
+        <div class="tooltip-author"></div>
+        <div class="tooltip-date"></div>
+        <div class="tooltip-refs"></div>
+    </div>
+
+    <script>
+        // Embedded git data
+        const gitData =
+{
+  "metadata": {
+    "repository": "vidcom",
+    "current_branch": "main",
+    "repo_url": "https://github.com/XAOSTECH/vidcom",
+    "generated": "2026-03-16T02:48:42Z",
+    "max_commits": 500
+  },
+  "commits": [
+    {
+      "sha": "995faf3e0312430519f435e356bd05dab3e1dd11",
+      "short": "995faf3",
+      "parents": "8663a88f958ad92dc37b9d58fb9c4b2486483a1c",
+      "author": "xaoscience",
+      "email": "69734795+xaoscience@users.noreply.github.com",
+      "date": "2026-03-15T06:29:24+01:00",
+      "timestamp": 1773552564,
+      "subject": "chore(dc-init): update workflows,actions",
+      "refs": "HEAD -> main, origin/main",
+      "position": {
+        "x": 600,
+        "y": 60,
+        "lane": 0,
+        "radius": 6,
+        "depth": 0,
+        "is_trunk": true,
+        "is_merge": false,
+        "is_fork": false
+      }
+    },
+    {
+      "sha": "8663a88f958ad92dc37b9d58fb9c4b2486483a1c",
+      "short": "8663a88",
+      "parents": "d8b836808be6480966dafd3c8452956cc364b069",
+      "author": "xaoscience",
+      "email": "69734795+xaoscience@users.noreply.github.com",
+      "date": "2026-03-06T05:32:33+01:00",
+      "timestamp": 1772771553,
+      "subject": "chore(dc-init): update workflows and actions",
+      "refs": "",
+      "position": {
+        "x": 600,
+        "y": 100,
+        "lane": 0,
+        "radius": 6,
+        "depth": 1,
+        "is_trunk": true,
+        "is_merge": false,
+        "is_fork": false
+      }
+    },
+    {
+      "sha": "d8b836808be6480966dafd3c8452956cc364b069",
+      "short": "d8b8368",
+      "parents": "30ebb8fa821fd68432d62f2bf77bc7131faec6a2 55810b3f98d222be43d07153468f20a14529ba21",
+      "author": "xaos-bot",
+      "email": "262248812+xaos-bot@users.noreply.github.com",
+      "date": "2026-03-01T02:02:32Z",
+      "timestamp": 1772330552,
+      "subject": "Merge pull request #2 from XAOSTECH:anglicise/20260301-020200\\n\\nchore: Convert American spellings to British English",
+      "refs": "",
+      "position": {
+        "x": 600,
+        "y": 140,
+        "lane": 0,
+        "radius": 10,
+        "depth": 2,
+        "is_trunk": true,
+        "is_merge": true,
+        "is_fork": false
+      }
+    },
+    {
+      "sha": "55810b3f98d222be43d07153468f20a14529ba21",
+      "short": "55810b3",
+      "parents": "30ebb8fa821fd68432d62f2bf77bc7131faec6a2",
+      "author": "xaos-bot",
+      "email": "262248812+xaos-bot@users.noreply.github.com",
+      "date": "2026-03-01T02:02:00Z",
+      "timestamp": 1772330520,
+      "subject": "chore: convert American spellings to British English",
+      "refs": "",
+      "position": {
+        "x": 720,
+        "y": 180,
+        "lane": 1,
+        "radius": 6,
+        "depth": 3,
+        "is_trunk": false,
+        "is_merge": false,
+        "is_fork": false
+      }
+    },
+    {
+      "sha": "30ebb8fa821fd68432d62f2bf77bc7131faec6a2",
+      "short": "30ebb8f",
+      "parents": "60a8fb01db3e3f87bd55745cdd5061d05a3ad087",
+      "author": "xaoscience",
+      "email": "69734795+xaoscience@users.noreply.github.com",
+      "date": "2026-02-23T01:09:14+01:00",
+      "timestamp": 1771805354,
+      "subject": "dc-init",
+      "refs": "",
+      "position": {
+        "x": 600,
+        "y": 260,
+        "lane": 0,
+        "radius": 9,
+        "depth": 4,
+        "is_trunk": true,
+        "is_merge": false,
+        "is_fork": true
+      }
+    },
+    {
+      "sha": "6eec9226cf7fc498c8ffa7b9e9417aac816e34d1",
+      "short": "6eec922",
+      "parents": "60a8fb01db3e3f87bd55745cdd5061d05a3ad087",
+      "author": "github-actions[bot]",
+      "email": "github-actions[bot]@users.noreply.github.com",
+      "date": "2026-02-23T00:03:04Z",
+      "timestamp": 1771804984,
+      "subject": "chore: convert American spellings to British English",
+      "refs": "origin/anglicise/20260223-000304",
+      "position": {
+        "x": 480,
+        "y": 300,
+        "lane": -1,
+        "radius": 6,
+        "depth": 5,
+        "is_trunk": false,
+        "is_merge": false,
+        "is_fork": false
+      }
+    },
+    {
+      "sha": "60a8fb01db3e3f87bd55745cdd5061d05a3ad087",
+      "short": "60a8fb0",
+      "parents": "5771e20e34ab36ad15e4bb65a871bfd4cba5f696",
+      "author": "xaoscience",
+      "email": "69734795+xaoscience@users.noreply.github.com",
+      "date": "2026-02-01T18:51:13+01:00",
+      "timestamp": 1769968273,
+      "subject": "chore:refactor container",
+      "refs": "",
+      "position": {
+        "x": 600,
+        "y": 380,
+        "lane": 0,
+        "radius": 9,
+        "depth": 6,
+        "is_trunk": true,
+        "is_merge": false,
+        "is_fork": true
+      }
+    },
+    {
+      "sha": "5771e20e34ab36ad15e4bb65a871bfd4cba5f696",
+      "short": "5771e20",
+      "parents": "db63b5da18012013b9f3a47acc393747f8544a4d",
+      "author": "xaoscience",
+      "email": "69734795+xaoscience@users.noreply.github.com",
+      "date": "2026-01-31T18:55:58+01:00",
+      "timestamp": 1769882158,
+      "subject": "fix(devcontainer): recreate examples + add minimal configs",
+      "refs": "",
+      "position": {
+        "x": 600,
+        "y": 420,
+        "lane": 0,
+        "radius": 6,
+        "depth": 7,
+        "is_trunk": true,
+        "is_merge": false,
+        "is_fork": false
+      }
+    },
+    {
+      "sha": "db63b5da18012013b9f3a47acc393747f8544a4d",
+      "short": "db63b5d",
+      "parents": "180cdc85d22eff0d660cae8d74402366b666138d",
+      "author": "xaoscience",
+      "email": "69734795+xaoscience@users.noreply.github.com",
+      "date": "2026-01-31T18:43:20+01:00",
+      "timestamp": 1769881400,
+      "subject": "fix(devcontainer): fix perm && pip installation",
+      "refs": "",
+      "position": {
+        "x": 600,
+        "y": 460,
+        "lane": 0,
+        "radius": 6,
+        "depth": 8,
+        "is_trunk": true,
+        "is_merge": false,
+        "is_fork": false
+      }
+    },
+    {
+      "sha": "180cdc85d22eff0d660cae8d74402366b666138d",
+      "short": "180cdc8",
+      "parents": "cccf6a0fad07889c313f6d06774d6b963176155e",
+      "author": "xaoscience",
+      "email": "69734795+xaoscience@users.noreply.github.com",
+      "date": "2026-01-31T17:49:13+01:00",
+      "timestamp": 1769878153,
+      "subject": "chore(devcontainer cleanup)",
+      "refs": "",
+      "position": {
+        "x": 600,
+        "y": 500,
+        "lane": 0,
+        "radius": 6,
+        "depth": 9,
+        "is_trunk": true,
+        "is_merge": false,
+        "is_fork": false
+      }
+    },
+    {
+      "sha": "cccf6a0fad07889c313f6d06774d6b963176155e",
+      "short": "cccf6a0",
+      "parents": "cf13e27dd066340737e4956a0728b589d5e1bc90",
+      "author": "xaoscience",
+      "email": "69734795+xaoscience@users.noreply.github.com",
+      "date": "2026-01-31T17:20:16+01:00",
+      "timestamp": 1769876416,
+      "subject": "feat: add dynamic nvm, YOLOv8n ONNX, and example configs",
+      "refs": "",
+      "position": {
+        "x": 600,
+        "y": 540,
+        "lane": 0,
+        "radius": 6,
+        "depth": 10,
+        "is_trunk": true,
+        "is_merge": false,
+        "is_fork": false
+      }
+    },
+    {
+      "sha": "cf13e27dd066340737e4956a0728b589d5e1bc90",
+      "short": "cf13e27",
+      "parents": "acd8047d0d8f3e36d875a5aa2071592ce4532732",
+      "author": "xaoscience",
+      "email": "69734795+xaoscience@users.noreply.github.com",
+      "date": "2026-01-31T17:18:30+01:00",
+      "timestamp": 1769876310,
+      "subject": "feat: add yt-dlp, sqlite3, cookie handling for video downloads",
+      "refs": "",
+      "position": {
+        "x": 600,
+        "y": 580,
+        "lane": 0,
+        "radius": 6,
+        "depth": 11,
+        "is_trunk": true,
+        "is_merge": false,
+        "is_fork": false
+      }
+    },
+    {
+      "sha": "acd8047d0d8f3e36d875a5aa2071592ce4532732",
+      "short": "acd8047",
+      "parents": "137be8be768aa2e45b0f97357649645285de6655",
+      "author": "xaoscience",
+      "email": "69734795+xaoscience@users.noreply.github.com",
+      "date": "2026-01-31T16:52:34+01:00",
+      "timestamp": 1769874754,
+      "subject": "feat: Add YOLO-based gaming highlight detection",
+      "refs": "",
+      "position": {
+        "x": 600,
+        "y": 620,
+        "lane": 0,
+        "radius": 6,
+        "depth": 12,
+        "is_trunk": true,
+        "is_merge": false,
+        "is_fork": false
+      }
+    },
+    {
+      "sha": "137be8be768aa2e45b0f97357649645285de6655",
+      "short": "137be8b",
+      "parents": "3b971b759ba8bff73caff7d8b0ac8bf3e811195f",
+      "author": "xaoscience",
+      "email": "69734795+xaoscience@users.noreply.github.com",
+      "date": "2026-01-30T23:02:36+01:00",
+      "timestamp": 1769810556,
+      "subject": "chore(cleanup)",
+      "refs": "",
+      "position": {
+        "x": 600,
+        "y": 660,
+        "lane": 0,
+        "radius": 6,
+        "depth": 13,
+        "is_trunk": true,
+        "is_merge": false,
+        "is_fork": false
+      }
+    },
+    {
+      "sha": "3b971b759ba8bff73caff7d8b0ac8bf3e811195f",
+      "short": "3b971b7",
+      "parents": "3467eaeca4bc31834a0407f41f2ddbe31d54470e",
+      "author": "xaoscience",
+      "email": "69734795+xaoscience@users.noreply.github.com",
+      "date": "2026-01-30T22:06:04+01:00",
+      "timestamp": 1769807164,
+      "subject": "feat(v0.3): YouTube fetch + processed tracking + ResNet50 model",
+      "refs": "",
+      "position": {
+        "x": 600,
+        "y": 700,
+        "lane": 0,
+        "radius": 6,
+        "depth": 14,
+        "is_trunk": true,
+        "is_merge": false,
+        "is_fork": false
+      }
+    },
+    {
+      "sha": "3467eaeca4bc31834a0407f41f2ddbe31d54470e",
+      "short": "3467eae",
+      "parents": "f5cced5a229f3fa83cadd02c7b2f772b0e1f884d",
+      "author": "xaoscience",
+      "email": "69734795+xaoscience@users.noreply.github.com",
+      "date": "2026-01-30T20:58:01+01:00",
+      "timestamp": 1769803081,
+      "subject": "feat(chromium): container-optimized config with privacy hardening",
+      "refs": "",
+      "position": {
+        "x": 600,
+        "y": 740,
+        "lane": 0,
+        "radius": 6,
+        "depth": 15,
+        "is_trunk": true,
+        "is_merge": false,
+        "is_fork": false
+      }
+    },
+    {
+      "sha": "f5cced5a229f3fa83cadd02c7b2f772b0e1f884d",
+      "short": "f5cced5",
+      "parents": "60fd3d32bd12dd13fcd435d30313fdbffbc6d281",
+      "author": "xaoscience",
+      "email": "69734795+xaoscience@users.noreply.github.com",
+      "date": "2026-01-30T19:15:30+01:00",
+      "timestamp": 1769796930,
+      "subject": "fix(chromium): detect symlink locks and improve container detection",
+      "refs": "",
+      "position": {
+        "x": 600,
+        "y": 780,
+        "lane": 0,
+        "radius": 6,
+        "depth": 16,
+        "is_trunk": true,
+        "is_merge": false,
+        "is_fork": false
+      }
+    },
+    {
+      "sha": "60fd3d32bd12dd13fcd435d30313fdbffbc6d281",
+      "short": "60fd3d3",
+      "parents": "",
+      "author": "xaoscience",
+      "email": "69734795+xaoscience@users.noreply.github.com",
+      "date": "2026-01-30T01:32:32+01:00",
+      "timestamp": 1769733152,
+      "subject": "feat(v0.2): complete VIDCOM pipeline implementation",
+      "refs": "",
+      "position": {
+        "x": 600,
+        "y": 820,
+        "lane": 0,
+        "radius": 6,
+        "depth": 17,
+        "is_trunk": true,
+        "is_merge": false,
+        "is_fork": false
+      }
+    }
+  ],
+  "branches": [
+    {
+      "name": "995faf3e0312430519f435e356bd05dab3e1dd11 chore(dc-init): update workflows,actions",
+      "sha": "*",
+      "current": false,
+      "merged": false
+    }
+  ],
+  "tags": []
+}
+;
+
+        const canvas = document.getElementById('treeCanvas');
+        const ctx = canvas.getContext('2d');
+        const tooltip = document.getElementById('tooltip');
+        const viewport = document.getElementById('viewport');
+        const statsEl = document.getElementById('stats');
+
+        let animationEnabled = true;
+        let windEnabled = true;
+        let frame = 0;
+        let hoveredCommit = null;
+        let selectedCommit = null;
+
+        // Build lookup maps
+        const commitBySha = {};
+        gitData.commits.forEach(c => { commitBySha[c.sha] = c; });
+
+        // Build tag lookup
+        const tagsBySha = {};
+        (gitData.tags || []).forEach(t => {
+            if (!tagsBySha[t.sha]) tagsBySha[t.sha] = [];
+            tagsBySha[t.sha].push(t.name);
+        });
+
+        // Build branch lookup
+        const branchBySha = {};
+        (gitData.branches || []).forEach(b => {
+            if (!branchBySha[b.sha]) branchBySha[b.sha] = [];
+            branchBySha[b.sha].push(b.name);
+        });
+
+        // Stats
+        const mergeCount = gitData.commits.filter(c => c.position && c.position.is_merge).length;
+        const forkCount = gitData.commits.filter(c => c.position && c.position.is_fork).length;
+        statsEl.textContent = `${gitData.commits.length} commits · ${mergeCount} merges · ${forkCount} forks · ${(gitData.tags || []).length} tags`;
+
+        // Branch colours (consistent per lane)
+        const LANE_COLOURS = [
+            '#4ade80', '#60a5fa', '#f472b6', '#fb923c', '#a78bfa',
+            '#34d399', '#fbbf24', '#f87171', '#38bdf8', '#c084fc',
+            '#2dd4bf', '#e879f9', '#facc15', '#818cf8', '#fb7185'
+        ];
+        function laneColour(lane) {
+            if (lane === 0) return '#4ade80'; // trunk green
+            const idx = ((Math.abs(lane) - 1) % (LANE_COLOURS.length - 1)) + 1;
+            return LANE_COLOURS[idx];
+        }
+
+        // Get ancestry chain for highlighting
+        function getAncestry(commit) {
+            const shas = new Set();
+            const queue = [commit.sha];
+            let limit = 500;
+            while (queue.length > 0 && limit-- > 0) {
+                const sha = queue.shift();
+                if (shas.has(sha)) continue;
+                shas.add(sha);
+                const c = commitBySha[sha];
+                if (c && c.parents) {
+                    c.parents.split(' ').filter(Boolean).forEach(p => queue.push(p));
+                }
+            }
+            return shas;
+        }
+
+        let ancestryHighlight = null;
+
+        // Wind intensity multiplier (0-5, default 1.0)
+        let windIntensity = 1.0;
+
+        function updateWindIntensity(val) {
+            windIntensity = val / 100;
+            document.getElementById('windVal').textContent = val + '%';
+            if (!animationEnabled) drawTree();
+        }
+
+        // Wind simulation — intensified base amplitudes
+        function windOffset(x, y, t) {
+            if (!windEnabled) return 0;
+            const s = windIntensity;
+            const w1 = Math.sin(t * 0.02 + x * 0.008 + y * 0.003) * 6 * s;
+            const w2 = Math.sin(t * 0.035 + x * 0.012 - y * 0.005) * 3 * s;
+            const w3 = Math.cos(t * 0.015 + y * 0.007) * 4 * s;
+            return w1 + w2 + w3;
+        }
+
+        function drawTree() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Dark background with subtle gradient
+            const bg = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            bg.addColorStop(0, '#0a0a1a');
+            bg.addColorStop(0.5, '#0d0d20');
+            bg.addColorStop(1, '#080818');
+            ctx.fillStyle = bg;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Subtle grid
+            ctx.strokeStyle = 'rgba(60, 60, 100, 0.08)';
+            ctx.lineWidth = 0.5;
+            for (let y = 0; y < canvas.height; y += 80) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width, y);
+                ctx.stroke();
+            }
+
+            // ---- Draw branch connection lines ----
+            gitData.commits.forEach(commit => {
+                if (!commit.position || !commit.parents) return;
+                const parents = commit.parents.split(' ').filter(Boolean);
+                parents.forEach(parentSha => {
+                    const parent = commitBySha[parentSha];
+                    if (!parent || !parent.position) return;
+
+                    const cx = commit.position.x + windOffset(commit.position.x, commit.position.y, frame);
+                    const cy = commit.position.y;
+                    const px = parent.position.x + windOffset(parent.position.x, parent.position.y, frame);
+                    const py = parent.position.y;
+
+                    const colour = laneColour(commit.position.lane);
+                    const isHighlighted = ancestryHighlight && ancestryHighlight.has(commit.sha) && ancestryHighlight.has(parentSha);
+
+                    ctx.strokeStyle = isHighlighted ? colour : (colour + '40');
+                    ctx.lineWidth = isHighlighted ? 2.5 : 1.5;
+
+                    ctx.beginPath();
+                    ctx.moveTo(cx, cy);
+
+                    if (commit.position.lane !== parent.position.lane) {
+                        // Curved branch/merge line
+                        const cpx1 = cx;
+                        const cpy1 = cy + (py - cy) * 0.4;
+                        const cpx2 = px;
+                        const cpy2 = cy + (py - cy) * 0.6;
+                        ctx.bezierCurveTo(cpx1, cpy1, cpx2, cpy2, px, py);
+                    } else {
+                        // Straight trunk line
+                        ctx.lineTo(px, py);
+                    }
+                    ctx.stroke();
+                });
+            });
+
+            // ---- Draw commit nodes (leaves) ----
+            gitData.commits.forEach(commit => {
+                if (!commit.position) return;
+                const pos = commit.position;
+                const isHovered = hoveredCommit === commit;
+                const isSelected = selectedCommit === commit;
+                const isInAncestry = ancestryHighlight && ancestryHighlight.has(commit.sha);
+                const hasTags = tagsBySha[commit.sha];
+                const hasBranch = branchBySha[commit.sha];
+
+                // Wind wobble on leaves
+                const wobble = windOffset(pos.x, pos.y, frame);
+                const x = pos.x + wobble;
+                const y = pos.y;
+
+                let baseRadius = pos.radius || 6;
+                if (hasTags) baseRadius = Math.max(baseRadius, 9);
+                const radius = isHovered ? baseRadius * 1.8 : (isSelected ? baseRadius * 1.5 : baseRadius);
+
+                // Choose colour
+                let fillColour;
+                if (hasTags) fillColour = '#38bdf8';
+                else if (pos.is_merge) fillColour = '#c084fc';
+                else if (pos.is_fork) fillColour = '#fb923c';
+                else fillColour = laneColour(pos.lane);
+
+                const dimmed = ancestryHighlight && !isInAncestry;
+                const alpha = dimmed ? 0.15 : 1;
+
+                // Glow for hovered/selected
+                if ((isHovered || isSelected) && !dimmed) {
+                    ctx.save();
+                    ctx.globalAlpha = 0.25;
+                    ctx.shadowColor = fillColour;
+                    ctx.shadowBlur = 20;
+                    ctx.fillStyle = fillColour;
+                    ctx.beginPath();
+                    ctx.arc(x, y, radius * 2.2, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+                }
+
+                // Leaf shape: draw a tiny leaf silhouette for non-merge commits
+                ctx.save();
+                ctx.globalAlpha = alpha;
+
+                if (!pos.is_merge && !hasTags && animationEnabled) {
+                    // Organic leaf shape
+                    const leafAngle = Math.sin(frame * 0.025 + pos.x * 0.01) * 0.3 + wobble * 0.05;
+                    ctx.save();
+                    ctx.translate(x, y);
+                    ctx.rotate(leafAngle);
+
+                    // Leaf body
+                    ctx.beginPath();
+                    ctx.moveTo(0, -radius * 1.2);
+                    ctx.bezierCurveTo(radius * 0.8, -radius * 0.4, radius * 0.8, radius * 0.6, 0, radius * 1.2);
+                    ctx.bezierCurveTo(-radius * 0.8, radius * 0.6, -radius * 0.8, -radius * 0.4, 0, -radius * 1.2);
+                    ctx.fillStyle = fillColour;
+                    ctx.fill();
+
+                    // Leaf vein
+                    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+                    ctx.lineWidth = 0.5;
+                    ctx.beginPath();
+                    ctx.moveTo(0, -radius * 0.8);
+                    ctx.lineTo(0, radius * 0.8);
+                    ctx.stroke();
+
+                    ctx.restore();
+                } else {
+                    // Circle for merges, tags, or when animation is off
+                    const grad = ctx.createRadialGradient(x - radius * 0.3, y - radius * 0.3, 0, x, y, radius);
+                    grad.addColorStop(0, fillColour);
+                    grad.addColorStop(1, fillColour + 'aa');
+                    ctx.fillStyle = grad;
+                    ctx.beginPath();
+                    ctx.arc(x, y, radius, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    // Outline
+                    ctx.strokeStyle = isHovered ? '#fbbf24' : 'rgba(255,255,255,0.15)';
+                    ctx.lineWidth = isHovered ? 2 : 1;
+                    ctx.stroke();
+                }
+
+                ctx.restore();
+
+                // Tag/branch labels
+                if (!dimmed && (hasTags || hasBranch)) {
+                    ctx.save();
+                    ctx.globalAlpha = alpha;
+                    const labels = [];
+                    if (hasTags) hasTags.forEach(t => labels.push({ text: '🏷 ' + t, colour: '#38bdf8' }));
+                    if (hasBranch) hasBranch.forEach(b => labels.push({ text: '⎇ ' + b, colour: '#34d399' }));
+
+                    labels.forEach((lbl, li) => {
+                        const lx = x + radius + 8;
+                        const ly = y + 4 + li * 16;
+                        ctx.font = 'bold 10px system-ui, sans-serif';
+                        const metrics = ctx.measureText(lbl.text);
+                        // Label background
+                        ctx.fillStyle = 'rgba(10, 10, 30, 0.85)';
+                        ctx.beginPath();
+                        ctx.roundRect(lx - 4, ly - 11, metrics.width + 8, 15, 3);
+                        ctx.fill();
+                        ctx.fillStyle = lbl.colour;
+                        ctx.fillText(lbl.text, lx, ly);
+                    });
+                    ctx.restore();
+                }
+            });
+
+            if (animationEnabled) {
+                frame++;
+                requestAnimationFrame(drawTree);
+            }
+        }
+
+        // Handle mouse movement for tooltip — positioned close to cursor
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            // Account for scroll within viewport
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            const mouseX = (e.clientX - rect.left) * scaleX;
+            const mouseY = (e.clientY - rect.top) * scaleY;
+
+            let found = null;
+            let bestDist = Infinity;
+            gitData.commits.forEach(commit => {
+                if (!commit.position) return;
+                const wx = windOffset(commit.position.x, commit.position.y, frame);
+                const dx = mouseX - (commit.position.x + wx);
+                const dy = mouseY - commit.position.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                const hitRadius = Math.max((commit.position.radius || 6) * 2, 12);
+                if (distance < hitRadius && distance < bestDist) {
+                    bestDist = distance;
+                    found = commit;
+                }
+            });
+
+            if (found !== hoveredCommit) {
+                hoveredCommit = found;
+                if (!animationEnabled) drawTree();
+            }
+
+            if (hoveredCommit) {
+                tooltip.querySelector('.tooltip-sha').textContent = hoveredCommit.short;
+                tooltip.querySelector('.tooltip-msg').textContent = hoveredCommit.subject;
+                tooltip.querySelector('.tooltip-author').textContent = `by ${hoveredCommit.author}`;
+                tooltip.querySelector('.tooltip-date').textContent = new Date(hoveredCommit.date).toLocaleString();
+
+                const refs = [];
+                if (tagsBySha[hoveredCommit.sha]) refs.push(...tagsBySha[hoveredCommit.sha].map(t => '🏷 ' + t));
+                if (branchBySha[hoveredCommit.sha]) refs.push(...branchBySha[hoveredCommit.sha].map(b => '⎇ ' + b));
+                tooltip.querySelector('.tooltip-refs').textContent = refs.join('  ');
+
+                // Position tooltip near cursor but keep within viewport
+                let tx = e.clientX + 16;
+                let ty = e.clientY + 16;
+                const tw = tooltip.offsetWidth || 300;
+                const th = tooltip.offsetHeight || 100;
+                if (tx + tw > window.innerWidth - 10) tx = e.clientX - tw - 16;
+                if (ty + th > window.innerHeight - 10) ty = e.clientY - th - 16;
+                if (tx < 10) tx = 10;
+                if (ty < 10) ty = 10;
+                tooltip.style.left = tx + 'px';
+                tooltip.style.top = ty + 'px';
+                tooltip.classList.add('visible');
+            } else {
+                tooltip.classList.remove('visible');
+            }
+        });
+
+        canvas.addEventListener('mouseleave', () => {
+            hoveredCommit = null;
+            tooltip.classList.remove('visible');
+            if (!animationEnabled) drawTree();
+        });
+
+        // Click to highlight ancestry; Ctrl+click or middle-click opens commit page
+        const repoUrl = (gitData.metadata && gitData.metadata.repo_url) || '';
+        canvas.addEventListener('click', (e) => {
+            if (hoveredCommit) {
+                if (e.ctrlKey || e.metaKey) {
+                    // Open commit page in new tab
+                    if (repoUrl) {
+                        window.open(repoUrl + '/commit/' + hoveredCommit.sha, '_blank', 'noopener');
+                    }
+                    return;
+                }
+                if (selectedCommit === hoveredCommit) {
+                    selectedCommit = null;
+                    ancestryHighlight = null;
+                } else {
+                    selectedCommit = hoveredCommit;
+                    ancestryHighlight = getAncestry(hoveredCommit);
+                }
+            } else {
+                selectedCommit = null;
+                ancestryHighlight = null;
+            }
+            if (!animationEnabled) drawTree();
+        });
+
+        canvas.addEventListener('auxclick', (e) => {
+            if (e.button === 1 && hoveredCommit && repoUrl) {
+                e.preventDefault();
+                window.open(repoUrl + '/commit/' + hoveredCommit.sha, '_blank', 'noopener');
+            }
+        });
+
+        function resetView() {
+            frame = 0;
+            hoveredCommit = null;
+            selectedCommit = null;
+            ancestryHighlight = null;
+            viewport.scrollTop = 0;
+            drawTree();
+        }
+
+        function toggleAnimation() {
+            animationEnabled = !animationEnabled;
+            if (animationEnabled) drawTree();
+        }
+
+        function toggleWind() {
+            windEnabled = !windEnabled;
+            if (!animationEnabled) drawTree();
+        }
+
+        // Initial draw
+        drawTree();
+    </script>
+</body>
+</html>

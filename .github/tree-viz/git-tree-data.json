@@ -1,0 +1,215 @@
+{
+  "metadata": {
+    "repository": "vidcom",
+    "current_branch": "main",
+    "repo_url": "https://github.com/XAOSTECH/vidcom",
+    "generated": "2026-03-16T02:48:42Z",
+    "max_commits": 500
+  },
+  "commits": [
+  {
+    "sha": "995faf3e0312430519f435e356bd05dab3e1dd11",
+    "short": "995faf3",
+    "parents": "8663a88f958ad92dc37b9d58fb9c4b2486483a1c",
+    "author": "xaoscience",
+    "email": "69734795+xaoscience@users.noreply.github.com",
+    "date": "2026-03-15T06:29:24+01:00",
+    "timestamp": 1773552564,
+    "subject": "chore(dc-init): update workflows,actions",
+    "refs": "HEAD -> main, origin/main"
+  },
+  {
+    "sha": "8663a88f958ad92dc37b9d58fb9c4b2486483a1c",
+    "short": "8663a88",
+    "parents": "d8b836808be6480966dafd3c8452956cc364b069",
+    "author": "xaoscience",
+    "email": "69734795+xaoscience@users.noreply.github.com",
+    "date": "2026-03-06T05:32:33+01:00",
+    "timestamp": 1772771553,
+    "subject": "chore(dc-init): update workflows and actions",
+    "refs": ""
+  },
+  {
+    "sha": "d8b836808be6480966dafd3c8452956cc364b069",
+    "short": "d8b8368",
+    "parents": "30ebb8fa821fd68432d62f2bf77bc7131faec6a2 55810b3f98d222be43d07153468f20a14529ba21",
+    "author": "xaos-bot",
+    "email": "262248812+xaos-bot@users.noreply.github.com",
+    "date": "2026-03-01T02:02:32Z",
+    "timestamp": 1772330552,
+    "subject": "Merge pull request #2 from XAOSTECH:anglicise/20260301-020200\\n\\nchore: Convert American spellings to British English",
+    "refs": ""
+  },
+  {
+    "sha": "55810b3f98d222be43d07153468f20a14529ba21",
+    "short": "55810b3",
+    "parents": "30ebb8fa821fd68432d62f2bf77bc7131faec6a2",
+    "author": "xaos-bot",
+    "email": "262248812+xaos-bot@users.noreply.github.com",
+    "date": "2026-03-01T02:02:00Z",
+    "timestamp": 1772330520,
+    "subject": "chore: convert American spellings to British English",
+    "refs": ""
+  },
+  {
+    "sha": "30ebb8fa821fd68432d62f2bf77bc7131faec6a2",
+    "short": "30ebb8f",
+    "parents": "60a8fb01db3e3f87bd55745cdd5061d05a3ad087",
+    "author": "xaoscience",
+    "email": "69734795+xaoscience@users.noreply.github.com",
+    "date": "2026-02-23T01:09:14+01:00",
+    "timestamp": 1771805354,
+    "subject": "dc-init",
+    "refs": ""
+  },
+  {
+    "sha": "6eec9226cf7fc498c8ffa7b9e9417aac816e34d1",
+    "short": "6eec922",
+    "parents": "60a8fb01db3e3f87bd55745cdd5061d05a3ad087",
+    "author": "github-actions[bot]",
+    "email": "github-actions[bot]@users.noreply.github.com",
+    "date": "2026-02-23T00:03:04Z",
+    "timestamp": 1771804984,
+    "subject": "chore: convert American spellings to British English",
+    "refs": "origin/anglicise/20260223-000304"
+  },
+  {
+    "sha": "60a8fb01db3e3f87bd55745cdd5061d05a3ad087",
+    "short": "60a8fb0",
+    "parents": "5771e20e34ab36ad15e4bb65a871bfd4cba5f696",
+    "author": "xaoscience",
+    "email": "69734795+xaoscience@users.noreply.github.com",
+    "date": "2026-02-01T18:51:13+01:00",
+    "timestamp": 1769968273,
+    "subject": "chore:refactor container",
+    "refs": ""
+  },
+  {
+    "sha": "5771e20e34ab36ad15e4bb65a871bfd4cba5f696",
+    "short": "5771e20",
+    "parents": "db63b5da18012013b9f3a47acc393747f8544a4d",
+    "author": "xaoscience",
+    "email": "69734795+xaoscience@users.noreply.github.com",
+    "date": "2026-01-31T18:55:58+01:00",
+    "timestamp": 1769882158,
+    "subject": "fix(devcontainer): recreate examples + add minimal configs",
+    "refs": ""
+  },
+  {
+    "sha": "db63b5da18012013b9f3a47acc393747f8544a4d",
+    "short": "db63b5d",
+    "parents": "180cdc85d22eff0d660cae8d74402366b666138d",
+    "author": "xaoscience",
+    "email": "69734795+xaoscience@users.noreply.github.com",
+    "date": "2026-01-31T18:43:20+01:00",
+    "timestamp": 1769881400,
+    "subject": "fix(devcontainer): fix perm && pip installation",
+    "refs": ""
+  },
+  {
+    "sha": "180cdc85d22eff0d660cae8d74402366b666138d",
+    "short": "180cdc8",
+    "parents": "cccf6a0fad07889c313f6d06774d6b963176155e",
+    "author": "xaoscience",
+    "email": "69734795+xaoscience@users.noreply.github.com",
+    "date": "2026-01-31T17:49:13+01:00",
+    "timestamp": 1769878153,
+    "subject": "chore(devcontainer cleanup)",
+    "refs": ""
+  },
+  {
+    "sha": "cccf6a0fad07889c313f6d06774d6b963176155e",
+    "short": "cccf6a0",
+    "parents": "cf13e27dd066340737e4956a0728b589d5e1bc90",
+    "author": "xaoscience",
+    "email": "69734795+xaoscience@users.noreply.github.com",
+    "date": "2026-01-31T17:20:16+01:00",
+    "timestamp": 1769876416,
+    "subject": "feat: add dynamic nvm, YOLOv8n ONNX, and example configs",
+    "refs": ""
+  },
+  {
+    "sha": "cf13e27dd066340737e4956a0728b589d5e1bc90",
+    "short": "cf13e27",
+    "parents": "acd8047d0d8f3e36d875a5aa2071592ce4532732",
+    "author": "xaoscience",
+    "email": "69734795+xaoscience@users.noreply.github.com",
+    "date": "2026-01-31T17:18:30+01:00",
+    "timestamp": 1769876310,
+    "subject": "feat: add yt-dlp, sqlite3, cookie handling for video downloads",
+    "refs": ""
+  },
+  {
+    "sha": "acd8047d0d8f3e36d875a5aa2071592ce4532732",
+    "short": "acd8047",
+    "parents": "137be8be768aa2e45b0f97357649645285de6655",
+    "author": "xaoscience",
+    "email": "69734795+xaoscience@users.noreply.github.com",
+    "date": "2026-01-31T16:52:34+01:00",
+    "timestamp": 1769874754,
+    "subject": "feat: Add YOLO-based gaming highlight detection",
+    "refs": ""
+  },
+  {
+    "sha": "137be8be768aa2e45b0f97357649645285de6655",
+    "short": "137be8b",
+    "parents": "3b971b759ba8bff73caff7d8b0ac8bf3e811195f",
+    "author": "xaoscience",
+    "email": "69734795+xaoscience@users.noreply.github.com",
+    "date": "2026-01-30T23:02:36+01:00",
+    "timestamp": 1769810556,
+    "subject": "chore(cleanup)",
+    "refs": ""
+  },
+  {
+    "sha": "3b971b759ba8bff73caff7d8b0ac8bf3e811195f",
+    "short": "3b971b7",
+    "parents": "3467eaeca4bc31834a0407f41f2ddbe31d54470e",
+    "author": "xaoscience",
+    "email": "69734795+xaoscience@users.noreply.github.com",
+    "date": "2026-01-30T22:06:04+01:00",
+    "timestamp": 1769807164,
+    "subject": "feat(v0.3): YouTube fetch + processed tracking + ResNet50 model",
+    "refs": ""
+  },
+  {
+    "sha": "3467eaeca4bc31834a0407f41f2ddbe31d54470e",
+    "short": "3467eae",
+    "parents": "f5cced5a229f3fa83cadd02c7b2f772b0e1f884d",
+    "author": "xaoscience",
+    "email": "69734795+xaoscience@users.noreply.github.com",
+    "date": "2026-01-30T20:58:01+01:00",
+    "timestamp": 1769803081,
+    "subject": "feat(chromium): container-optimized config with privacy hardening",
+    "refs": ""
+  },
+  {
+    "sha": "f5cced5a229f3fa83cadd02c7b2f772b0e1f884d",
+    "short": "f5cced5",
+    "parents": "60fd3d32bd12dd13fcd435d30313fdbffbc6d281",
+    "author": "xaoscience",
+    "email": "69734795+xaoscience@users.noreply.github.com",
+    "date": "2026-01-30T19:15:30+01:00",
+    "timestamp": 1769796930,
+    "subject": "fix(chromium): detect symlink locks and improve container detection",
+    "refs": ""
+  },
+  {
+    "sha": "60fd3d32bd12dd13fcd435d30313fdbffbc6d281",
+    "short": "60fd3d3",
+    "parents": "",
+    "author": "xaoscience",
+    "email": "69734795+xaoscience@users.noreply.github.com",
+    "date": "2026-01-30T01:32:32+01:00",
+    "timestamp": 1769733152,
+    "subject": "feat(v0.2): complete VIDCOM pipeline implementation",
+    "refs": ""
+  }
+],
+  "branches": [
+  {"name":"995faf3e0312430519f435e356bd05dab3e1dd11 chore(dc-init): update workflows,actions","sha":"*","current":false,"merged":false}
+],
+  "tags": [
+
+]
+}
