@@ -22,7 +22,7 @@
 #
 # WHAT IT DOES:
 #   1. Checks commits since last release
-#   2. If 5+ commits found, automatically triggers release workflow
+#   2. If 5+ commits found, triggers re-release (or version bump if 30+)
 #   3. Scans submodules for updates (5+ commits behind main)
 #   4. Updates outdated submodules and creates PR
 #   5. Generates summary report
@@ -36,6 +36,7 @@
 # CONFIGURATION:
 #   Adjust thresholds via workflow inputs:
 #   - release_threshold: Minimum commits to trigger release (default: 5)
+#   - new_release_threshold: Commits ceiling before forcing version bump (default: 30)
 #   - submodule_threshold: Minimum commits behind to update (default: 5)
 #
 # BEST PRACTICES:
@@ -74,6 +75,11 @@ on:
         required: false
         type: number
         default: 5
+      new_release_threshold:
+        description: 'Commits ceiling - above this, bump version instead of re-release'
+        required: false
+        type: number
+        default: 30
       submodule_threshold:
         description: 'Minimum commits behind to update submodule'
         required: false
@@ -84,6 +90,11 @@ on:
         required: false
         type: boolean
         default: false
+      normalize_version:
+        description: 'Normalise v0.0.x to v0.1.0 (uncheck to keep v0.0.x scheme)'
+        required: false
+        type: boolean
+        default: true
       check_dependencies:
         description: 'Check and update dependencies (package.json, requirements.txt)'
         required: false
@@ -135,6 +146,9 @@ concurrency:
   group: update-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   update:
     name: Check Repository Updates
@@ -169,6 +183,7 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app_token.outputs.token }}
           RELEASE_THRESHOLD: ${{ github.event.inputs.release_threshold || '5' }}
+          NEW_RELEASE_THRESHOLD: ${{ github.event.inputs.new_release_threshold || '30' }}
           DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
         run: |
           echo "## 📦 Release Check" >> $GITHUB_STEP_SUMMARY
@@ -185,12 +200,29 @@ jobs:
             exit 0
           fi
           
-          # Count commits since last release
+          # Count commits since last release (for minimum threshold)
           COMMIT_COUNT=$(git log "${LATEST_TAG}..HEAD" --oneline | wc -l)
+          
+          # Cumulative count: commits since the PRIOR different version tag
+          # Re-releases move the tag to HEAD, resetting the above count.
+          # To accumulate across re-releases, find the tag before the current version.
+          LATEST_VERSION="${LATEST_TAG#v}"
+          PRIOR_TAG=$(git tag -l 'v*' --sort=-version:refname | grep -vE 'latest|alpha|beta|rc' | \
+                      while read -r t; do
+                        v="${t#v}"
+                        [[ "$v" != "$LATEST_VERSION" ]] && echo "$t" && break
+                      done) || true
+          if [[ -n "$PRIOR_TAG" ]]; then
+            CUMULATIVE_COUNT=$(git log "${PRIOR_TAG}..HEAD" --oneline | wc -l)
+          else
+            CUMULATIVE_COUNT=$COMMIT_COUNT
+          fi
           
           echo "📊 Latest release: $LATEST_TAG" | tee -a $GITHUB_STEP_SUMMARY
           echo "📊 Commits since last release: $COMMIT_COUNT" | tee -a $GITHUB_STEP_SUMMARY
+          echo "📊 Cumulative commits since prior version (${PRIOR_TAG:-none}): $CUMULATIVE_COUNT" | tee -a $GITHUB_STEP_SUMMARY
           echo "🎯 Release threshold: $RELEASE_THRESHOLD" | tee -a $GITHUB_STEP_SUMMARY
+          echo "🎯 New release ceiling: $NEW_RELEASE_THRESHOLD" | tee -a $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
           if [[ $COMMIT_COUNT -ge $RELEASE_THRESHOLD ]]; then
@@ -202,6 +234,7 @@ jobs:
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
             echo "trigger_release=true" >> $GITHUB_OUTPUT
             echo "commit_count=$COMMIT_COUNT" >> $GITHUB_OUTPUT
+            echo "cumulative_count=$CUMULATIVE_COUNT" >> $GITHUB_OUTPUT
             echo "latest_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
           else
             echo "ℹ️ Not enough changes - skipping release ($COMMIT_COUNT < $RELEASE_THRESHOLD)" | tee -a $GITHUB_STEP_SUMMARY
@@ -212,24 +245,44 @@ jobs:
         if: steps.check_release.outputs.trigger_release == 'true' && github.event.inputs.dry_run != 'true'
         env:
           GH_TOKEN: ${{ steps.app_token.outputs.token }}
+          NEW_RELEASE_THRESHOLD: ${{ github.event.inputs.new_release_threshold || '30' }}
+          CUMULATIVE_COUNT: ${{ steps.check_release.outputs.cumulative_count }}
+          COMMIT_COUNT: ${{ steps.check_release.outputs.commit_count }}
         run: |
-          echo "🚀 Triggering release workflow for re-release..."
-          
           CURRENT_VERSION=$(gh api repos/${{ github.repository }}/releases/latest --jq '.tag_name' 2>/dev/null || \
                             git tag --list 'v*' --sort=-version:refname | grep -vE 'latest|alpha|beta|rc' | head -1)
           CURRENT_VERSION=${CURRENT_VERSION#v}
           
-          echo "📌 Current version: ${CURRENT_VERSION}"
+          # Normalise v0.0.x → v0.1.0 (standard semver starting point)
+          if [[ "${{ github.event.inputs.normalize_version }}" != 'false' && "$CURRENT_VERSION" =~ ^0\.0\.[0-9]+$ ]]; then
+            echo "📐 Normalising v${CURRENT_VERSION} → v0.1.0 (standard semver convention)"
+            RELEASE_VERSION="0.1.0"
+            RELEASE_TYPE="new release"
+          elif [[ $CUMULATIVE_COUNT -ge $NEW_RELEASE_THRESHOLD ]]; then
+            # Cumulative changes across re-releases exceed ceiling — bump patch version
+            IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+            NEXT_VERSION="${MAJOR}.${MINOR}.$(( PATCH + 1 ))"
+            echo "📈 Cumulative commits ($CUMULATIVE_COUNT) exceeds ceiling ($NEW_RELEASE_THRESHOLD) — bumping version"
+            echo "📌 ${CURRENT_VERSION} → ${NEXT_VERSION}"
+            RELEASE_VERSION="$NEXT_VERSION"
+            RELEASE_TYPE="new release"
+          else
+            echo "🔄 Cumulative commits ($CUMULATIVE_COUNT) within ceiling ($NEW_RELEASE_THRESHOLD) — re-releasing"
+            echo "📌 Current version: ${CURRENT_VERSION}"
+            RELEASE_VERSION="$CURRENT_VERSION"
+            RELEASE_TYPE="re-release"
+          fi
           
           gh workflow run release.yml \
             --ref ${{ github.ref_name }} \
-            -f version="${CURRENT_VERSION}" \
+            -f version="${RELEASE_VERSION}" \
+            -f normalize_version="${{ github.event.inputs.normalize_version || 'true' }}" \
             -f prerelease=false \
             -f draft=false
           
           echo "✅ Release workflow triggered successfully"
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "🚀 **Release workflow triggered** (re-release with ${{ steps.check_release.outputs.commit_count }} new commits)" >> $GITHUB_STEP_SUMMARY
+          echo "🚀 **Release workflow triggered** (${RELEASE_TYPE}: v${RELEASE_VERSION} — ${COMMIT_COUNT} new, ${CUMULATIVE_COUNT} cumulative)" >> $GITHUB_STEP_SUMMARY
 
       - name: Check submodules
         id: check_submodules
@@ -682,7 +735,7 @@ jobs:
             echo "📌 **$COMMENTED item(s) marked as stale**" >> $GITHUB_STEP_SUMMARY
           fi
 
-      - name: Check and trigger tree visualization
+      - name: Check and trigger tree visualisation
         id: check_tree_viz
         if: ${{ github.event.inputs.update_tree_viz != 'false' && github.event.inputs.dry_run != 'true' }}
         env:
@@ -693,7 +746,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
 
           # Find the last tree-viz commit
-          LAST_VIZ_SHA=$(git log --all --oneline --format='%H' -- '.github/tree-viz/' | head -1 || echo "")
+          LAST_VIZ_SHA=$(git log --all --oneline --format='%H' -- '.github/static/tree-viz/' | head -1 || echo "")
 
           if [[ -z "$LAST_VIZ_SHA" ]]; then
             COMMITS_SINCE=999
@@ -747,6 +800,7 @@ jobs:
           echo "- **Dummy commit:** ${{ github.event.inputs.dummy_commit == 'true' && '✅ Enabled' || '❌ Disabled' }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Tree viz:** ${{ github.event.inputs.update_tree_viz != 'false' && '✅ Enabled' || '❌ Disabled' }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Release threshold:** ${{ github.event.inputs.release_threshold || '5' }} commits" >> $GITHUB_STEP_SUMMARY
+          echo "- **New release ceiling:** ${{ github.event.inputs.new_release_threshold || '30' }} commits" >> $GITHUB_STEP_SUMMARY
           echo "- **Tree viz threshold:** ${{ github.event.inputs.tree_viz_threshold || '30' }} commits" >> $GITHUB_STEP_SUMMARY
           echo "- **Submodule threshold:** ${{ github.event.inputs.submodule_threshold || '5' }} commits" >> $GITHUB_STEP_SUMMARY
           echo "- **Branch age:** ${{ github.event.inputs.branch_age_days || '5' }} days" >> $GITHUB_STEP_SUMMARY

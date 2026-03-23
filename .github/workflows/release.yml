@@ -116,6 +116,11 @@ on:
         required: false
         type: boolean
         default: false
+      normalize_version:
+        description: 'Normalise v0.0.x to v0.1.0 (uncheck to keep v0.0.x scheme)'
+        required: false
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -127,6 +132,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   GUM_VERSION: '0.17.0'
 
 jobs:
@@ -179,8 +185,14 @@ jobs:
                 MAJOR=${BASH_REMATCH[1]}
                 MINOR=${BASH_REMATCH[2]}
                 PATCH=${BASH_REMATCH[3]}
-                VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
-                echo "🔢 Auto-detected next version: ${VERSION} (from latest: v${LATEST})"
+                # Normalise v0.0.x → v0.1.0 (standard semver starting point)
+                if [[ "${{ github.event.inputs.normalize_version }}" != 'false' && "$MAJOR" -eq 0 && "$MINOR" -eq 0 ]]; then
+                  VERSION="0.1.0"
+                  echo "📐 Normalising v${LATEST} → v${VERSION} (standard semver convention)"
+                else
+                  VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
+                  echo "🔢 Auto-detected next version: ${VERSION} (from latest: v${LATEST})"
+                fi
               else
                 echo "❌ Could not determine latest version to auto-increment"
                 exit 1
@@ -296,7 +308,7 @@ jobs:
             ENTRY_LINE=$(grep -n "^## \[${VERSION}\]\|^## ${VERSION}" CHANGELOG.md 2>/dev/null | head -1 | cut -d: -f1)
             ENTRY_DATE=$(sed -n "${ENTRY_LINE}p" CHANGELOG.md 2>/dev/null | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}' | head -1)
             if [[ -n "$ENTRY_LINE" && "$ENTRY_DATE" == "$TODAY" ]]; then
-              HEADING="## [${VERSION}] - ${TODAY}"
+              HEADING="## [${VERSION}] - ${TODAY} (re-release)"
               MODE="overwrite"
               echo "♻️ Same-day re-release: overwriting CHANGELOG section for v${VERSION}"
             else

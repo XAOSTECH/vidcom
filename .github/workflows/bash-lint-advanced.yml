@@ -32,6 +32,9 @@ permissions:
   checks: write
   actions: read
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   shellcheck-analysis:
     name: ShellCheck Analysis & Suggestions
