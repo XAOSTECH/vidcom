@@ -12,17 +12,15 @@ permissions:
   contents: write
   pull-requests: write
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   anglicise:
     name: Check British English Spelling
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
       - name: Generate App Token
         id: app_token
         uses: actions/create-github-app-token@v2
@@ -30,13 +28,11 @@ jobs:
           app-id: ${{ secrets['XB_AI'] }}
           private-key: ${{ secrets['XB_PK'] }}
 
-      - name: Setup bot identity
-        uses: XAOSTECH/dev-control/.github/actions/identity@b067f72ca7f849b734a45634f23581a739d5146f # v2.0.0
+      - name: Checkout code
+        uses: actions/checkout@v6
         with:
-          gpg-private-key: ${{ secrets['XB_GK'] }}
-          gpg-passphrase: ${{ secrets['XB_GP'] }}
-          user-token: ${{ secrets['XB_UT'] }}
-          bot-name: ${{ vars.BOT_NAME || 'xaos-bot' }}
+          fetch-depth: 0
+          token: ${{ steps.app_token.outputs.token }}
 
       - name: Check for American spellings
         id: check
@@ -328,7 +324,7 @@ jobs:
 
           is_excluded_text_line() {
             local line="$1"
-            echo "$line" | grep -qE '(https?://|file://|github/|[?&](color|center|gray|licence)=[a-zA-Z0-9]+|"Authorization": "Bearer|types:[[:space:]]*\[[^]]+\]|--[a-z-]+ (center|color|gray)|\$\{?(color|center|gray);\}|\b(color|center|gray|licence)[_A-Z]*=|gum |\\$|shields\.io|stop-color|[a-z-]color[a-z-]*:|color[a-z-]*:[[:space:]]*#|align-items:)'
+            echo "$line" | grep -qE "(https?://|file://|github/|[?&](color|center|gray|licence)=|=[\"'](center|color|licence)|\"Authorization\": \"Bearer|types:[[:space:]]*\[[^]]+\]|--[a-z-]+ (center|color|gray)|--color|--center|\$\{?(color|center|gray|licence)|\b(color|center|gray|licence|COLOR|CENTER|GRAY|LICENCE)[_A-Z]*=|license/licence|licence/license|license_file|licence_file|LICENSE(_FILES?)?|LICENSE.*LICENCE|LICENCE.*LICENSE|gum |\\$|shields\.io|stop-color|[a-z-]color[a-z-]*:|color[a-z-]*:[[:space:]]*#|align-items:)"
           }
 
           echo "## British English Spelling Check" >> $GITHUB_STEP_SUMMARY
@@ -437,7 +433,7 @@ jobs:
 
           is_excluded_text_line() {
             local line="$1"
-            echo "$line" | grep -qE "(https?://|github/|[?&](color|center|gray|licence)=|=[\"'](center|color|licence)|types:[[:space:]]*\[[^]]+\]|--[a-z-]+ (center|color|gray)|--color|--center|\$\{?(color|center|gray|licence)|\b(COLOR|CENTER|GRAY|LICENCE)[_A-Z]*=|gum |\\$|shields\.io|stop-color|[a-z-]color[a-z-]*:|color[a-z-]*:[[:space:]]*#|align-items:)"
+            echo "$line" | grep -qE "(https?://|file://|github/|[?&](color|center|gray|licence)=|=[\"'](center|color|licence)|\"Authorization\": \"Bearer|types:[[:space:]]*\[[^]]+\]|--[a-z-]+ (center|color|gray)|--color|--center|\$\{?(color|center|gray|licence)|\b(color|center|gray|licence|COLOR|CENTER|GRAY|LICENCE)[_A-Z]*=|license/licence|licence/license|license_file|licence_file|LICENSE(_FILES?)?|LICENSE.*LICENCE|LICENCE.*LICENSE|gum |\\$|shields\.io|stop-color|[a-z-]color[a-z-]*:|color[a-z-]*:[[:space:]]*#|align-items:)"
           }
           
           FIXED_COUNT=0
