@@ -3,10 +3,43 @@
     "repository": "vidcom",
     "current_branch": "main",
     "repo_url": "https://github.com/XAOSTECH/vidcom",
-    "generated": "2026-03-30T02:52:40Z",
+    "generated": "2026-04-06T02:53:38Z",
     "max_commits": 500
   },
   "commits": [
+  {
+    "sha": "c6974f926a949207da9715954477663feec1110c",
+    "short": "c6974f9",
+    "parents": "9ce89f777e08667cee4a450c777061de0bffedae 9f0c796bf42bd42a2e3acee9083c5e34429c37c8",
+    "author": "xaostech[bot]",
+    "email": "260314499+xaostech[bot]@users.noreply.github.com",
+    "date": "2026-04-01T02:13:24Z",
+    "timestamp": 1775009604,
+    "subject": "Merge pull request #3 from XAOSTECH:anglicise/20260401-021254",
+    "refs": "HEAD -> main, origin/main"
+  },
+  {
+    "sha": "9f0c796bf42bd42a2e3acee9083c5e34429c37c8",
+    "short": "9f0c796",
+    "parents": "9ce89f777e08667cee4a450c777061de0bffedae",
+    "author": "xaos-bot",
+    "email": "262248812+xaos-bot@users.noreply.github.com",
+    "date": "2026-04-01T02:12:54Z",
+    "timestamp": 1775009574,
+    "subject": "chore: convert American spellings to British English",
+    "refs": ""
+  },
+  {
+    "sha": "9ce89f777e08667cee4a450c777061de0bffedae",
+    "short": "9ce89f7",
+    "parents": "20b3c6f9ac24a66f418239bfef218bbd2aa4bf2e",
+    "author": "xaos-bot",
+    "email": "262248812+xaos-bot@users.noreply.github.com",
+    "date": "2026-03-30T02:52:40Z",
+    "timestamp": 1774839160,
+    "subject": "chore: update git tree visualisation",
+    "refs": ""
+  },
   {
     "sha": "20b3c6f9ac24a66f418239bfef218bbd2aa4bf2e",
     "short": "20b3c6f",
@@ -16,7 +49,7 @@
     "date": "2026-03-23T17:55:15+01:00",
     "timestamp": 1774284915,
     "subject": "chore(dc-init): load workflows,actions",
-    "refs": "HEAD -> main, origin/main"
+    "refs": ""
   },
   {
     "sha": "2133034da6beb962bdb5c7a29e04857357d3d1d8",
@@ -229,7 +262,7 @@
   }
 ],
   "branches": [
-  {"name":"20b3c6f9ac24a66f418239bfef218bbd2aa4bf2e chore(dc-init): load workflows,actions","sha":"*","current":false,"merged":false}
+  {"name":"c6974f926a949207da9715954477663feec1110c Merge pull request #3 from XAOSTECH:anglicise/20260401-021254","sha":"*","current":false,"merged":false}
 ],
   "tags": [
 
