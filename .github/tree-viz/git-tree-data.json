@@ -3,10 +3,21 @@
     "repository": "vidcom",
     "current_branch": "main",
     "repo_url": "https://github.com/XAOSTECH/vidcom",
-    "generated": "2026-04-06T02:53:38Z",
+    "generated": "2026-04-13T03:23:15Z",
     "max_commits": 500
   },
   "commits": [
+  {
+    "sha": "130c089f1b2ddc369dfb6c26beee071a1ebeb29d",
+    "short": "130c089",
+    "parents": "c6974f926a949207da9715954477663feec1110c",
+    "author": "xaos-bot",
+    "email": "262248812+xaos-bot@users.noreply.github.com",
+    "date": "2026-04-06T02:53:38Z",
+    "timestamp": 1775444018,
+    "subject": "chore: update git tree visualisation",
+    "refs": "HEAD -> main, origin/main"
+  },
   {
     "sha": "c6974f926a949207da9715954477663feec1110c",
     "short": "c6974f9",
@@ -16,7 +27,7 @@
     "date": "2026-04-01T02:13:24Z",
     "timestamp": 1775009604,
     "subject": "Merge pull request #3 from XAOSTECH:anglicise/20260401-021254",
-    "refs": "HEAD -> main, origin/main"
+    "refs": ""
   },
   {
     "sha": "9f0c796bf42bd42a2e3acee9083c5e34429c37c8",
@@ -262,7 +273,7 @@
   }
 ],
   "branches": [
-  {"name":"c6974f926a949207da9715954477663feec1110c Merge pull request #3 from XAOSTECH:anglicise/20260401-021254","sha":"*","current":false,"merged":false}
+  {"name":"130c089f1b2ddc369dfb6c26beee071a1ebeb29d chore: update git tree visualisation","sha":"*","current":false,"merged":false}
 ],
   "tags": [
 
