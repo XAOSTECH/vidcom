@@ -126,12 +126,15 @@ def main():
     # Progress file for resuming
     progress_file = args.output + '.progress'
     start_frame = 0
-    if os.path.exists(progress_file):
+    if args.resume and os.path.exists(progress_file):
         with open(progress_file) as pf:
             try:
                 start_frame = int(pf.read().strip())
             except Exception:
                 start_frame = 0
+    elif not args.resume and os.path.exists(progress_file):
+        # If not resuming, remove any old progress file
+        os.remove(progress_file)
 
 
     # Load kill counter region from config
@@ -194,6 +197,8 @@ def main():
     # Elimination banner region as fractions of frame (x, y, w, h).
     ap.add_argument("--region", default="0.25,0.40,0.50,0.22",
         help="Crop region x,y,w,h as frame fractions")
+    ap.add_argument("--continue", dest="resume", action="store_true",
+        help="Resume from last saved progress if available")
     args = ap.parse_args()
 
     vw, vh = probe_dimensions(args.video)
