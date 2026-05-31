@@ -121,9 +121,21 @@ on:
         required: false
         type: boolean
         default: true
+      sign_artifacts:
+        description: 'Sign Windows binaries via SignPath.io (requires org setup)'
+        required: false
+        type: boolean
+        default: false
+      consolidate:
+        description: 'Consolidate: absorb all newer releases into this version (deletes newer tags/releases)'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
+  actions: write
+  id-token: write
 
 # One release job per tag at a time; if a second run starts (e.g. re-trigger from tag push)
 # it waits rather than racing. Both paths are idempotent so the second run is a no-op.
@@ -215,6 +227,74 @@ jobs:
             exit 1
           fi
           echo "✅ Version format valid: $VERSION"
+
+      - name: Consolidate newer releases
+        if: github.event.inputs.consolidate == 'true' && github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG_NAME: ${{ steps.version.outputs.tag_name }}
+        run: |
+          # Collect version tags strictly newer than the target
+          mapfile -t NEWER_TAGS < <(
+            git tag -l 'v*' --sort=-version:refname \
+              | grep -vE 'latest|alpha|beta|rc' \
+              | while IFS= read -r tag; do
+                  tv="${tag#v}"
+                  if [[ "$tv" != "$VERSION" ]] && \
+                     [[ "$(printf '%s\n%s' "$VERSION" "$tv" | sort -V | tail -1)" == "$tv" ]]; then
+                    echo "$tag"
+                  fi
+                done
+          )
+
+          if [[ ${#NEWER_TAGS[@]} -eq 0 ]]; then
+            echo "⏭️ No newer releases to consolidate — v${VERSION} is already latest"
+            exit 0
+          fi
+
+          echo "🔄 Consolidating ${#NEWER_TAGS[@]} newer release(s) into v${VERSION}:"
+          printf '  → %s\n' "${NEWER_TAGS[@]}"
+
+          # Delete newer releases and their tags
+          for tag in "${NEWER_TAGS[@]}"; do
+            echo "🗑️ Removing release: $tag"
+            gh release delete "$tag" --yes 2>/dev/null || true
+            git push origin ":refs/tags/${tag}" 2>/dev/null || true
+            git tag -d "$tag" 2>/dev/null || true
+          done
+
+          # Also clean the target version so the release path runs fresh
+          gh release delete "$TAG_NAME" --yes 2>/dev/null || true
+          git push origin ":refs/tags/${TAG_NAME}" 2>/dev/null || true
+          git tag -d "$TAG_NAME" 2>/dev/null || true
+          git push origin :refs/tags/latest 2>/dev/null || true
+          git tag -d latest 2>/dev/null || true
+
+          # Strip CHANGELOG sections for all consolidated versions (rebuilt from combined commits)
+          if [[ -f "CHANGELOG.md" ]]; then
+            for tag in "${NEWER_TAGS[@]}" "$TAG_NAME"; do
+              ver="${tag#v}"
+              ENTRY_LINE=$(grep -n "^## \\[${ver}\\]\\|^## ${ver}" CHANGELOG.md 2>/dev/null | head -1 | cut -d: -f1)
+              [[ -z "$ENTRY_LINE" ]] && continue
+              NEXT=$(tail -n +$((ENTRY_LINE + 1)) CHANGELOG.md | grep -n "^## " | head -1 | cut -d: -f1)
+              if [[ -n "$NEXT" ]]; then
+                sed -i "${ENTRY_LINE},$((ENTRY_LINE + NEXT - 2))d" CHANGELOG.md
+              else
+                sed -i "${ENTRY_LINE},\$d" CHANGELOG.md
+              fi
+              echo "  📝 Removed CHANGELOG section: v${ver}"
+            done
+            cat -s CHANGELOG.md > /tmp/cl_n.md && mv /tmp/cl_n.md CHANGELOG.md
+
+            if ! git diff --quiet CHANGELOG.md 2>/dev/null; then
+              git add CHANGELOG.md
+              git commit -m "chore: consolidate releases — absorb changes into v${VERSION}"
+              git push
+            fi
+          fi
+
+          echo "✅ Consolidated ${#NEWER_TAGS[@]} release(s) — proceeding with v${VERSION} re-release"
 
       - name: Check if release already published
         id: check_release
@@ -496,36 +576,326 @@ jobs:
       #     cd ..
       # ========================================================================
 
-      - name: List build artifacts
+      # ========================================================================
+      # BUILD WORKFLOWS: Auto-detect, trigger, and collect build-*.yml artifacts
+      # ========================================================================
+
+      - name: Trigger build workflows
+        id: build_workflows
         if: steps.check_release.outputs.exists != 'true'
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
         run: |
+          TAG_NAME="${{ steps.version.outputs.tag_name }}"
           VERSION="${{ steps.version.outputs.version }}"
-          
-          if [[ ! -d "dist" ]]; then
-            echo "⚠️ No dist/ directory - no tarballs were built"
-            echo "tarball_count=0" >> $GITHUB_ENV
+
+          shopt -s nullglob
+          BUILD_FILES=(.github/workflows/build-*.yml)
+          shopt -u nullglob
+
+          if [[ ${#BUILD_FILES[@]} -eq 0 ]]; then
+            echo "⏭️ No build-*.yml workflows found — skipping"
+            echo "has_builds=false" >> $GITHUB_OUTPUT
             exit 0
           fi
-          
+
+          echo "has_builds=true" >> $GITHUB_OUTPUT
+          RUN_IDS=""
+
+          for wf in "${BUILD_FILES[@]}"; do
+            WF_NAME=$(basename "$wf")
+            TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+            echo "🔨 Triggering ${WF_NAME} (version=${VERSION}, ref=${TAG_NAME})"
+            gh workflow run "$WF_NAME" --ref "$TAG_NAME" -f version="$VERSION"
+
+            # Poll for the dispatched run (created after our timestamp)
+            RUN_ID=""
+            for attempt in $(seq 1 30); do
+              sleep 10
+              RUN_ID=$(gh run list \
+                --workflow="$WF_NAME" \
+                --limit=5 \
+                --json databaseId,createdAt \
+                --jq "[.[] | select(.createdAt >= \"${TIMESTAMP}\")] | .[0].databaseId // empty")
+
+              if [[ -n "$RUN_ID" ]]; then
+                RUN_IDS="${RUN_IDS:+$RUN_IDS }$RUN_ID"
+                echo "  → Dispatched run: $RUN_ID"
+                break
+              fi
+            done
+
+            if [[ -z "$RUN_ID" ]]; then
+              echo "::error::Could not find dispatched run for $WF_NAME after 5 minutes"
+              exit 1
+            fi
+          done
+
+          echo "run_ids=$RUN_IDS" >> $GITHUB_OUTPUT
+
+      - name: Wait for build workflows
+        if: steps.build_workflows.outputs.has_builds == 'true' && steps.check_release.outputs.exists != 'true'
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        run: |
+          FAILED=0
+          for RUN_ID in ${{ steps.build_workflows.outputs.run_ids }}; do
+            echo "⏳ Waiting for run ${RUN_ID}..."
+            if gh run watch "$RUN_ID" --exit-status; then
+              echo "✅ Run ${RUN_ID} completed successfully"
+            else
+              echo "::error::Build workflow run ${RUN_ID} failed"
+              FAILED=1
+            fi
+          done
+
+          if [[ "$FAILED" -eq 1 ]]; then
+            echo "::error::One or more build workflows failed"
+            exit 1
+          fi
+
+      - name: Download build artifacts
+        if: steps.build_workflows.outputs.has_builds == 'true' && steps.check_release.outputs.exists != 'true'
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        run: |
+          mkdir -p dist
+          STAGING=$(mktemp -d)
+
+          for RUN_ID in ${{ steps.build_workflows.outputs.run_ids }}; do
+            echo "📥 Downloading artifacts from run ${RUN_ID}..."
+            gh run download "$RUN_ID" --dir "$STAGING" 2>/dev/null || {
+              echo "⚠️ No downloadable artifacts from run ${RUN_ID}"
+              continue
+            }
+          done
+
+          # Flatten artifact directories into dist/
+          find "$STAGING" -type f | while IFS= read -r f; do
+            BASENAME=$(basename "$f")
+            cp "$f" "dist/${BASENAME}"
+            echo "  → dist/${BASENAME}"
+          done
+
+          rm -rf "$STAGING"
+          echo "📦 Combined dist/ contents:"
+          ls -la dist/
+
+      - name: List build artifacts
+        if: steps.check_release.outputs.exists != 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if [[ ! -d "dist" ]]; then
+            echo "⚠️ No dist/ directory - no tarballs were built"
+            {
+              echo 'tarball_count<<GHEOF'
+              echo '0'
+              echo 'GHEOF'
+            } >> "$GITHUB_ENV"
+            exit 0
+          fi
+
           echo "📦 Build artifacts:"
           ls -la dist/ || true
-          
+
           # Get main tarball info (first .tar.gz that's not a sub-package)
           TARBALL=$(ls dist/*.tar.gz 2>/dev/null | head -1 || echo "")
           if [[ -n "$TARBALL" ]]; then
-            echo "tarball_path=${TARBALL}" >> $GITHUB_ENV
-            echo "tarball_name=$(basename "$TARBALL")" >> $GITHUB_ENV
-            
+            SAFE_TARBALL=$(printf '%s' "$TARBALL" | tr -d '\n\r')
+            SAFE_TARBALL_NAME=$(basename "$SAFE_TARBALL" | tr -d '\n\r')
+            {
+              echo 'tarball_path<<GHEOF'
+              printf '%s\n' "$SAFE_TARBALL"
+              echo 'GHEOF'
+              echo 'tarball_name<<GHEOF'
+              printf '%s\n' "$SAFE_TARBALL_NAME"
+              echo 'GHEOF'
+            } >> "$GITHUB_ENV"
+
             if [[ -f "${TARBALL}.sha256" ]]; then
               SHA256=$(cat "${TARBALL}.sha256" | awk '{print $1}')
-              echo "tarball_sha256=${SHA256}" >> $GITHUB_ENV
-              echo "🔐 Tarball SHA256: ${SHA256}"
+              SAFE_SHA256=$(printf '%s' "$SHA256" | tr -d '\n\r')
+              {
+                echo 'tarball_sha256<<GHEOF'
+                printf '%s\n' "$SAFE_SHA256"
+                echo 'GHEOF'
+              } >> "$GITHUB_ENV"
+              echo "🔐 Tarball SHA256: ${SAFE_SHA256}"
             fi
           fi
-          
+
           # Count all tarballs for summary
           TARBALL_COUNT=$(ls dist/*.tar.gz 2>/dev/null | wc -l || echo "0")
-          echo "tarball_count=${TARBALL_COUNT}" >> $GITHUB_ENV
+          SAFE_TARBALL_COUNT=$(printf '%s' "$TARBALL_COUNT" | tr -d '\n\r')
+          {
+            echo 'tarball_count<<GHEOF'
+            printf '%s\n' "$SAFE_TARBALL_COUNT"
+            echo 'GHEOF'
+          } >> "$GITHUB_ENV"
+
+          # Count build workflow artifacts (non-tarball files)
+          BUILD_ARTIFACT_COUNT=$(find dist/ -maxdepth 1 -type f ! -name "*.tar.gz" ! -name "*.sha256" ! -name "SHA256SUMS.txt" 2>/dev/null | wc -l || echo "0")
+          SAFE_BUILD_ARTIFACT_COUNT=$(printf '%s' "$BUILD_ARTIFACT_COUNT" | tr -d '\n\r')
+          {
+            echo 'build_artifact_count<<GHEOF'
+            printf '%s\n' "$SAFE_BUILD_ARTIFACT_COUNT"
+            echo 'GHEOF'
+          } >> "$GITHUB_ENV"
+
+      # ========================================================================
+      # CODE SIGNING: Authenticode signing via SignPath.io (optional)
+      # ========================================================================
+      # Signs Windows binaries (.exe, .dll, .msi) for SmartScreen trust.
+      # Coexists with GPG (which signs git commits/tags for provenance).
+      #
+      # Prerequisites:
+      #   - Org variable: SIGNPATH_ORG_ID
+      #   - Repo variable: SIGNPATH_PROJECT_SLUG
+      #   - Org secret: SIGNPATH_API_TOKEN
+      #   - SignPath project with artefact configuration matching file types
+      #   - sign_artifacts: true in workflow dispatch
+      #
+      # See: https://github.com/XAOSTECH/dev-control/blob/main/docs/SIGNING.md
+      # ========================================================================
+
+      - name: Sign build artefacts (Authenticode)
+        id: code_signing
+        if: >
+          steps.check_release.outputs.exists != 'true'
+          && github.event.inputs.sign_artifacts == 'true'
+          && steps.build_workflows.outputs.has_builds == 'true'
+        env:
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SIGNPATH_ORG_ID: ${{ vars.SIGNPATH_ORG_ID }}
+          SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+        run: |
+          ORG_ID="${SIGNPATH_ORG_ID}"
+          PROJECT="${SIGNPATH_PROJECT_SLUG}"
+          POLICY="release-signing"
+          CONFIG="exe"
+
+          # Graceful degradation — skip if not configured
+          if [[ -z "$ORG_ID" ]]; then
+            echo "⚠️ SIGNPATH_ORG_ID not set — skipping code signing"
+            echo "ℹ️ See: https://github.com/XAOSTECH/dev-control/blob/main/docs/SIGNING.md"
+            echo "outcome=skipped" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          if [[ -z "$PROJECT" ]]; then
+            echo "⚠️ SIGNPATH_PROJECT_SLUG not set — skipping code signing"
+            echo "outcome=skipped" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          if [[ -z "$SIGNPATH_API_TOKEN" ]]; then
+            echo "⚠️ SIGNPATH_API_TOKEN secret not set — skipping code signing"
+            echo "outcome=skipped" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          API="https://app.signpath.io/api/v1/${ORG_ID}"
+          SIGNED_COUNT=0
+          FAILED_COUNT=0
+
+          # Sign each signable file in dist/
+          shopt -s nullglob
+          SIGNABLE_FILES=(dist/*.exe dist/*.dll dist/*.msi)
+          shopt -u nullglob
+
+          if [[ ${#SIGNABLE_FILES[@]} -eq 0 ]]; then
+            echo "⏭️ No signable files found in dist/ (.exe, .dll, .msi)"
+            echo "outcome=skipped" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "🔏 Submitting ${#SIGNABLE_FILES[@]} file(s) to SignPath for signing..."
+
+          for FILE in "${SIGNABLE_FILES[@]}"; do
+            BASENAME=$(basename "$FILE")
+            echo "  → Signing: ${BASENAME}"
+
+            # Submit signing request
+            RESPONSE=$(curl -fsSL -X POST "${API}/signing-requests" \
+              -H "Authorization: Bearer ${SIGNPATH_API_TOKEN}" \
+              -F "projectSlug=${PROJECT}" \
+              -F "signingPolicySlug=${POLICY}" \
+              -F "artifactConfigurationSlug=${CONFIG}" \
+              -F "artifact=@${FILE}" \
+              2>&1) || {
+                echo "::warning::Failed to submit ${BASENAME} for signing: ${RESPONSE}"
+                ((FAILED_COUNT++)) || true
+                continue
+              }
+
+            REQUEST_ID=$(echo "$RESPONSE" | jq -r '.signingRequestId // empty' 2>/dev/null)
+            if [[ -z "$REQUEST_ID" ]]; then
+              echo "::warning::No signing request ID returned for ${BASENAME}"
+              ((FAILED_COUNT++)) || true
+              continue
+            fi
+
+            echo "    Request ID: ${REQUEST_ID}"
+
+            # Poll for completion (up to 10 minutes)
+            for attempt in $(seq 1 60); do
+              sleep 10
+              STATUS_RESPONSE=$(curl -fsSL "${API}/signing-requests/${REQUEST_ID}" \
+                -H "Authorization: Bearer ${SIGNPATH_API_TOKEN}" 2>/dev/null || echo '{}')
+              STATUS=$(echo "$STATUS_RESPONSE" | jq -r '.status // empty' 2>/dev/null)
+
+              case "$STATUS" in
+                Completed)
+                  # Download signed artefact
+                  DOWNLOAD_URL=$(echo "$STATUS_RESPONSE" | jq -r '.signedArtifactLink // empty' 2>/dev/null)
+                  if [[ -n "$DOWNLOAD_URL" ]]; then
+                    curl -fsSL -o "${FILE}" "${DOWNLOAD_URL}" \
+                      -H "Authorization: Bearer ${SIGNPATH_API_TOKEN}"
+                    echo "    ✅ Signed: ${BASENAME}"
+                    ((SIGNED_COUNT++)) || true
+                  else
+                    echo "::warning::Signed artefact URL missing for ${BASENAME}"
+                    ((FAILED_COUNT++)) || true
+                  fi
+                  break
+                  ;;
+                Failed|Denied|Cancelled)
+                  echo "::warning::Signing ${STATUS,,} for ${BASENAME}"
+                  ((FAILED_COUNT++)) || true
+                  break
+                  ;;
+                *)
+                  # Still processing
+                  ;;
+              esac
+
+              if [[ $attempt -eq 60 ]]; then
+                echo "::warning::Signing timed out for ${BASENAME} after 10 minutes"
+                ((FAILED_COUNT++)) || true
+              fi
+            done
+          done
+
+          echo ""
+          echo "🔏 Signing summary: ${SIGNED_COUNT} signed, ${FAILED_COUNT} failed"
+
+          if [[ $SIGNED_COUNT -gt 0 ]]; then
+            echo "outcome=success" >> $GITHUB_OUTPUT
+            echo "signed_count=${SIGNED_COUNT}" >> $GITHUB_OUTPUT
+
+            # Regenerate checksums for signed files
+            if [[ -f "dist/SHA256SUMS.txt" ]]; then
+              echo "🔄 Regenerating SHA256SUMS.txt with signed binaries..."
+              cd dist
+              sha256sum *.exe *.dll *.msi *.tar.gz 2>/dev/null | grep -v SHA256SUMS > SHA256SUMS.txt || true
+              cd ..
+            fi
+          elif [[ $FAILED_COUNT -gt 0 ]]; then
+            echo "outcome=failure" >> $GITHUB_OUTPUT
+            echo "::warning::Some files failed to sign — releasing unsigned"
+          else
+            echo "outcome=skipped" >> $GITHUB_OUTPUT
+          fi
 
       - name: Generate release notes
         id: release_notes
@@ -572,6 +942,18 @@ jobs:
           |------|--------|
           | ${tarball_name} | \`${tarball_sha256}\` |
           EOF
+
+            # Append build artifact checksums from SHA256SUMS.txt files
+            if [[ -f "dist/SHA256SUMS.txt" ]]; then
+              while IFS= read -r line; do
+                line="${line//$'\r'/}"
+                [[ -z "$line" ]] && continue
+                HASH=$(echo "$line" | awk '{print $1}')
+                FILE=$(echo "$line" | sed 's/^[a-fA-F0-9]*[ *]*//')
+                [[ -z "$FILE" || "$FILE" == "SHA256SUMS.txt" ]] && continue
+                echo "| ${FILE} | \`${HASH}\` |" >> "$NOTES_FILE"
+              done < dist/SHA256SUMS.txt
+            fi
           else
             # No custom tarball - show git installation
             cat >> "$NOTES_FILE" << EOF
@@ -591,7 +973,43 @@ jobs:
           \`\`\`
           EOF
           fi
+
+          # If build artifacts exist but no tarball, still show checksums
+          if [[ -z "${tarball_name:-}" && -f "dist/SHA256SUMS.txt" ]]; then
+            echo "" >> "$NOTES_FILE"
+            echo "## Checksums" >> "$NOTES_FILE"
+            echo "" >> "$NOTES_FILE"
+            echo "| File | SHA256 |" >> "$NOTES_FILE"
+            echo "|------|--------|" >> "$NOTES_FILE"
+            while IFS= read -r line; do
+              line="${line//$'\r'/}"
+              [[ -z "$line" ]] && continue
+              HASH=$(echo "$line" | awk '{print $1}')
+              FILE=$(echo "$line" | sed 's/^[a-fA-F0-9]*[ *]*//')
+              [[ -z "$FILE" || "$FILE" == "SHA256SUMS.txt" ]] && continue
+              echo "| ${FILE} | \`${HASH}\` |" >> "$NOTES_FILE"
+            done < dist/SHA256SUMS.txt
+          fi
           
+          # Add verification section if artefacts were code-signed
+          if [[ "${{ steps.code_signing.outputs.outcome }}" == "success" ]]; then
+            cat >> "$NOTES_FILE" << 'SIGNEOF'
+
+          ## Verification
+
+          Windows binaries in this release are **Authenticode signed** via [SignPath.io](https://signpath.io).
+          To verify a signed binary:
+
+          **PowerShell:**
+          ```powershell
+          Get-AuthenticodeSignature .\YourFile.exe | Format-List *
+          ```
+
+          **Expected output:** `Status: Valid`, `SignerCertificate` issued to XAOSTECH.
+
+          SIGNEOF
+          fi
+
           cat >> "$NOTES_FILE" << EOF
           
           ---
@@ -618,7 +1036,7 @@ jobs:
           NOTES_FILE="${{ steps.release_notes.outputs.notes_file }}"
           
           # Build file list (may be empty if no tarb alls)
-          FILES=$(find dist/ -name "*.tar.gz" -o -name "*.sha256" 2>/dev/null | tr '\n' ' ' || echo "")
+          FILES=$(find dist/ -maxdepth 1 -type f ! -name "SHA256SUMS.txt" 2>/dev/null | tr '\n' ' ' || echo "")
           
           # Create release (idempotent — skip if already exists)
           if gh release view "$TAG_NAME" &>/dev/null; then
@@ -722,6 +1140,12 @@ jobs:
           echo "| Version | ${VERSION} |" >> $GITHUB_STEP_SUMMARY
           echo "| Tag | ${TAG_NAME} |" >> $GITHUB_STEP_SUMMARY
           echo "| Artifacts | ${TARBALL_COUNT} tarball(s) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build Artifacts | ${build_artifact_count:-0} file(s) |" >> $GITHUB_STEP_SUMMARY
+          if [[ "${{ steps.code_signing.outputs.outcome }}" == "success" ]]; then
+            echo "| Code Signing | ✅ ${SIGNING_COUNT:-} artefact(s) signed |" >> $GITHUB_STEP_SUMMARY
+          elif [[ "${{ github.event.inputs.sign_artifacts }}" == "true" ]]; then
+            echo "| Code Signing | ⚠️ ${{ steps.code_signing.outputs.outcome || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
+          fi
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Links" >> $GITHUB_STEP_SUMMARY
           echo "- [Release](https://github.com/$GITHUB_REPOSITORY/releases/tag/${TAG_NAME})" >> $GITHUB_STEP_SUMMARY
