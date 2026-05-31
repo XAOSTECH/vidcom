@@ -123,6 +123,16 @@ def match_keywords(text):
 
 
 def main():
+    # Progress file for resuming
+    progress_file = args.output + '.progress'
+    start_frame = 0
+    if os.path.exists(progress_file):
+        with open(progress_file) as pf:
+            try:
+                start_frame = int(pf.read().strip())
+            except Exception:
+                start_frame = 0
+
 
     # Load kill counter region from config
     region_conf = os.path.join(os.path.dirname(__file__), '../config/killcounter_region.conf')
@@ -217,6 +227,10 @@ def main():
         if len(raw) < frame_bytes:
             break
         ts = frame_idx / args.fps
+        # Skip frames before start_frame (for resume)
+        if frame_idx < start_frame:
+            frame_idx += 1
+            continue
         frame_idx += 1
         gray = np.frombuffer(raw, dtype=np.uint8).reshape(ch, cw)
 
@@ -233,12 +247,19 @@ def main():
             events.append((ts, f"KILLCOUNT_{killcount}"))
         prev_killcount = killcount if killcount is not None else prev_killcount
 
+        # Save progress every 500 frames
         if frame_idx % 500 == 0:
+            with open(progress_file, 'w') as pf:
+                pf.write(str(frame_idx))
             elapsed = time.time() - t0
             print(f"\r[fortnite] {frame_idx} frames "
                   f"({ts:.0f}s video), {len(events)} hits, "
                   f"{ocr_calls} OCR calls, {elapsed:.0f}s elapsed",
                   end="", flush=True)
+
+    # Remove progress file on completion
+    if os.path.exists(progress_file):
+        os.remove(progress_file)
 
     proc.wait()
     print()
