@@ -123,38 +123,67 @@ def match_keywords(text):
 
 
 def main():
+
+    # Load kill counter region from config
+    region_conf = os.path.join(os.path.dirname(__file__), '../config/killcounter_region.conf')
+    kill_crop = None
+    if os.path.exists(region_conf):
+        with open(region_conf) as f:
+            lines = f.readlines()
+        vals = {}
+        for line in lines:
+            if '=' in line:
+                k, v = line.strip().split('=')
+                vals[k.strip()] = int(v.strip())
+        kill_crop = (vals['CROP_X'], vals['CROP_Y'], vals['CROP_WIDTH'], vals['CROP_HEIGHT'])
+
+    def ocr_killcounter(frame):
+        # Crop and enhance kill counter region, then OCR
+        x, y, w, h = kill_crop
+        crop = frame[y:y+h, x:x+w]
+        pil = Image.fromarray(crop, mode="L").resize((40,40), Image.LANCZOS).filter(ImageFilter.SHARPEN)
+        pil = ImageEnhance.Contrast(pil).enhance(2.0)
+        buf = io.BytesIO()
+        pil.save(buf, format="PNG")
+        buf.seek(0)
+        proc = subprocess.run([
+            "tesseract", "stdin", "stdout", "--psm", "6", "-c", "tessedit_char_whitelist=0123456789"
+        ], input=buf.read(), capture_output=True)
+        out = proc.stdout.decode("utf-8", "ignore").strip()
+        return int(out) if out.isdigit() else None
+
     ap = argparse.ArgumentParser(description="Fortnite OCR elimination detector")
     ap.add_argument("video")
     ap.add_argument("--fps", type=float, default=0.33,
-                    help="Frames per second to sample (default 0.33, i.e., every 3 seconds)")
+        help="Frames per second to sample (default 0.33, i.e., every 3 seconds)")
     ap.add_argument("--output", default="output/highlights.json",
-                    help="Path to highlights JSON")
+        help="Path to highlights JSON")
     ap.add_argument("--dataset", default="dataset/fortnite",
-                    help="Directory to harvest labelled crops into")
+        help="Directory to harvest labelled crops into")
     ap.add_argument("--no-harvest", action="store_true",
-                    help="Disable saving training crops")
+        help="Disable saving training crops")
     ap.add_argument("--cooldown", type=float, default=6.0,
-                    help="Seconds to merge consecutive hits into one event")
+        help="Seconds to merge consecutive hits into one event")
     ap.add_argument("--psm", type=int, default=11,
-                    help="Tesseract page segmentation mode (11=sparse text)")
+        help="Tesseract page segmentation mode (11=sparse text)")
     ap.add_argument("--bright-thresh", type=int, default=200,
-                    help="Pixel value considered 'text' for the pre-filter")
+        help="Pixel value considered 'text' for the pre-filter")
     ap.add_argument("--bright-min", type=int, default=40,
-                    help="Min bright pixels in crop before OCR is attempted")
+        help="Min bright pixels in crop before OCR is attempted")
     ap.add_argument("--nokill-sample", type=int, default=200,
-                    help="Harvest 1 in N non-kill frames as negatives")
+        help="Harvest 1 in N non-kill frames as negatives")
     ap.add_argument("--train-size", type=int, default=100,
-                    help="Square size of harvested crops (NxN grayscale)")
+        help="Square size of harvested crops (NxN grayscale)")
     ap.add_argument("--no-gpu", action="store_true", help="Disable NVDEC")
     # Restrict highlights to a specific player's own eliminations.
     # --player and --username are interchangeable aliases.
     ap.add_argument("--player", "--username", dest="player", default=None,
-                    help="Only keep eliminations performed by this player "
-                         "(matches the kill-feed eliminator or the "
-                         "top-middle 'YOU ELIMINATED' notification)")
+        help="Only keep eliminations performed by this player "
+             "(matches the kill-feed eliminator or the "
+             "top-middle 'YOU ELIMINATED' notification)")
     # Elimination banner region as fractions of frame (x, y, w, h).
     ap.add_argument("--region", default="0.25,0.40,0.50,0.22",
-                    help="Crop region x,y,w,h as frame fractions")
+        help="Crop region x,y,w,h as frame fractions")
     args = ap.parse_args()
 
     vw, vh = probe_dimensions(args.video)
@@ -178,6 +207,7 @@ def main():
     events = []           # list of (timestamp, keyword) raw hits
     frame_idx = 0
     ocr_calls = 0
+    prev_killcount = None
     harvested_kill = 0
     harvested_nokill = 0
     t0 = time.time()
@@ -190,31 +220,18 @@ def main():
         frame_idx += 1
         gray = np.frombuffer(raw, dtype=np.uint8).reshape(ch, cw)
 
-        # Cheap pre-filter: eliminations are high-contrast bright text.
-        bright = int((gray >= args.bright_thresh).sum())
-        matched = None
-        if bright >= args.bright_min:
-            text = ocr_image(gray, args.psm)
-            ocr_calls += 1
-            matched = match_keywords(text)
-            # Restrict to the requested player's own eliminations, if any.
-            if matched and not is_player_kill(text, args.player):
-                matched = None
+        # OCR kill counter
+        killcount = None
+        if kill_crop is not None:
+            try:
+                killcount = ocr_killcounter(gray)
+            except Exception:
+                killcount = None
 
-        if matched:
-            events.append((ts, matched))
-            if not args.no_harvest:
-                crop_img = Image.fromarray(gray, mode="L").resize(
-                    (args.train_size, args.train_size))
-                crop_img.save(os.path.join(
-                    args.dataset, "kill", f"k_{frame_idx:08d}.png"))
-                harvested_kill += 1
-        elif not args.no_harvest and frame_idx % args.nokill_sample == 0:
-            crop_img = Image.fromarray(gray, mode="L").resize(
-                (args.train_size, args.train_size))
-            crop_img.save(os.path.join(
-                args.dataset, "nokill", f"n_{frame_idx:08d}.png"))
-            harvested_nokill += 1
+        # Only count highlight if kill counter increments
+        if killcount is not None and prev_killcount is not None and killcount > prev_killcount:
+            events.append((ts, f"KILLCOUNT_{killcount}"))
+        prev_killcount = killcount if killcount is not None else prev_killcount
 
         if frame_idx % 500 == 0:
             elapsed = time.time() - t0
