@@ -17,6 +17,8 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 # Configuration
 ONNX_VERSION="${ONNX_VERSION:-1.20.1}"
 TENSORRT_VERSION="${TENSORRT_VERSION:-10.8.0}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
 # Detect CUDA version
 if command -v nvcc &>/dev/null; then
@@ -59,6 +61,36 @@ install_bc() {
     sudo apt-get update
     sudo apt-get install -y --no-install-recommends bc
     log_info "bc installed"
+}
+
+#------------------------------------------------------------------------------
+# OCR + Python ML stack (tesseract for Fortnite kill-feed detection + venv for
+# training/converting Crispy-style models). Durable across container rebuilds.
+#------------------------------------------------------------------------------
+install_ocr_stack() {
+    log_info "Installing OCR + Python ML stack..."
+
+    # Tesseract OCR engine (CLI used by the Fortnite elimination detector)
+    if ! command -v tesseract &>/dev/null; then
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends \
+            tesseract-ocr python3-venv python3-pip
+    else
+        log_info "tesseract already installed: $(tesseract --version 2>&1 | head -1)"
+    fi
+
+    # Python venv for model training / ONNX conversion (PEP-668 safe)
+    local VENV_DIR="${PROJECT_DIR:-/workspaces/vidcom}/.venv"
+    if [[ ! -d "$VENV_DIR" ]]; then
+        log_info "Creating Python venv at $VENV_DIR"
+        python3 -m venv "$VENV_DIR"
+    fi
+    # shellcheck disable=SC1091
+    "$VENV_DIR/bin/pip" install --quiet --upgrade pip
+    "$VENV_DIR/bin/pip" install --quiet \
+        numpy onnx onnxruntime pillow
+
+    log_info "OCR stack installed (tesseract + venv at $VENV_DIR)"
 }
 
 #------------------------------------------------------------------------------
@@ -216,6 +248,14 @@ verify_installation() {
         log_error "✗ ONNX Runtime not found"
         ((ERRORS++))
     fi
+
+    # Check tesseract
+    if command -v tesseract &>/dev/null; then
+        log_info "✓ tesseract: $(tesseract --version 2>&1 | head -1)"
+    else
+        log_error "✗ tesseract not found"
+        ((ERRORS++))
+    fi
     
     # Check TensorRT
     if dpkg -l | grep -q libnvinfer; then
@@ -251,6 +291,7 @@ main() {
     
     install_jq
     install_bc
+    install_ocr_stack
     install_tensorrt
     install_onnxruntime
     
