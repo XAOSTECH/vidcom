@@ -36,6 +36,7 @@ AUTO_DETECT=false
 GAME=""
 CONFIDENCE=0.5
 MAX_CLIPS=10
+PLAYER=""
 
 #------------------------------------------------------------------------------
 # Parse arguments
@@ -50,6 +51,7 @@ usage() {
     echo "Options:"
     echo "  --auto           Auto-detect highlights using vidcom"
     echo "  --game NAME      Game type for detection (fortnite, valorant, etc.)"
+    echo "  --player NAME    Only keep eliminations by this player (alias: --username)"
     echo "  --confidence N   Detection threshold 0.0-1.0 (default: 0.5)"
     echo "  --max-clips N    Maximum clips to generate (default: 10)"
     echo "  --output DIR     Output directory (default: ./output)"
@@ -83,6 +85,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --game)
             GAME="$2"
+            shift 2
+            ;;
+        --player|--username)
+            PLAYER="$2"
             shift 2
             ;;
         --confidence)
@@ -134,16 +140,30 @@ detect_highlights() {
     
     log_step "Auto-detecting highlights in: $video"
     
-    # Build vidcom command
-    local cmd="$VIDCOM highlights \"$video\" --confidence $CONFIDENCE"
-    [[ -n "$GAME" ]] && cmd+=" --game $GAME"
-    
-    log_info "Running: $cmd"
-    
-    # Run highlight detection
-    if ! eval $cmd; then
-        log_error "Highlight detection failed"
-        return 1
+    # Fortnite has no icon kill-feed -> use the OCR detector (teacher) instead of
+    # the YOLO/ONNX path. It also harvests training data for the Crispy model.
+    if [[ "${GAME,,}" == "fortnite" ]]; then
+        local py="${PROJECT_DIR}/.venv/bin/python"
+        [[ -x "$py" ]] || py="python3"
+        log_info "Running OCR detector: $py scripts/detect-fortnite.py \"$video\""
+        local fnt_args=("$video" --output "${OUTPUT_DIR}/highlights.json" --region "0.0,0.62,0.40,0.16")
+        [[ -n "$PLAYER" ]] && fnt_args+=(--player "$PLAYER")
+        if ! "$py" "${PROJECT_DIR}/scripts/detect-fortnite.py" "${fnt_args[@]}"; then
+            log_error "Fortnite OCR detection failed"
+            return 1
+        fi
+    else
+        # Build vidcom command
+        local cmd="$VIDCOM highlights \"$video\" --confidence $CONFIDENCE"
+        [[ -n "$GAME" ]] && cmd+=" --game $GAME"
+        
+        log_info "Running: $cmd"
+        
+        # Run highlight detection
+        if ! eval $cmd; then
+            log_error "Highlight detection failed"
+            return 1
+        fi
     fi
     
     # Check for output JSON
