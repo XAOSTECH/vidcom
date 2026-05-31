@@ -125,8 +125,8 @@ def match_keywords(text):
 def main():
     ap = argparse.ArgumentParser(description="Fortnite OCR elimination detector")
     ap.add_argument("video")
-    ap.add_argument("--fps", type=float, default=2.0,
-                    help="Frames per second to sample (default 2)")
+    ap.add_argument("--fps", type=float, default=0.33,
+                    help="Frames per second to sample (default 0.33, i.e., every 3 seconds)")
     ap.add_argument("--output", default="output/highlights.json",
                     help="Path to highlights JSON")
     ap.add_argument("--dataset", default="dataset/fortnite",
