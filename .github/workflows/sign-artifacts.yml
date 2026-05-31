@@ -1,0 +1,189 @@
+# Template created by https://github.com/XAOSTECH/dev-control
+# See templates folder documentation for details.
+
+# ============================================================================
+# Code Signing Workflow Template (sign-artifacts.yml)
+# ============================================================================
+#
+# ORIGIN: https://github.com/XAOSTECH/dev-control
+# This workflow template is part of the dev-control toolkit.
+# See: https://github.com/XAOSTECH/dev-control/blob/main/workflows-templates/
+#
+# ============================================================================
+#
+# Reusable workflow for Authenticode code signing via SignPath.io.
+# Submits unsigned artefacts to SignPath, waits for completion, and
+# re-uploads the signed artefacts (replacing the originals).
+#
+# SIGNING vs GPG:
+#   GPG (identity action)     — signs git commits/tags  → provenance
+#   Authenticode (this file)  — signs Windows binaries  → SmartScreen trust
+#   Both coexist and serve different purposes.
+#
+# TRIGGERS:
+#   - workflow_call only (called from release.yml or other workflows)
+#
+# CONTRACT:
+#   Caller must upload an artefact via actions/upload-artifact@v4 before
+#   invoking this workflow. The artefact is downloaded, sent to SignPath,
+#   and re-uploaded with the same name (overwriting the unsigned version).
+#
+# REQUIREMENTS:
+#   Org-level one-time setup:
+#     1. Register at https://signpath.io/open-source
+#     2. Install the SignPath GitHub App on the XAOSTECH organisation
+#     3. Create a signing policy (e.g. 'release-signing')
+#     4. Create artefact configurations for each format (exe, msi, ps1, etc.)
+#     5. Store SIGNPATH_API_TOKEN as an org secret (if not using OIDC)
+#     6. Store SIGNPATH_ORG_ID as an org variable
+#     7. Allow signpath/github-action-submit-signing-request in the org's
+#        third-party actions list (or fork it and pin by SHA)
+#
+#   Per-repo setup:
+#     1. Create a SignPath project for the repo
+#     2. Set repo variable: SIGNPATH_PROJECT_SLUG
+#     3. Set sign_artifacts: true in the release workflow dispatch
+#     4. No additional secrets needed if using the SignPath GitHub App (OIDC)
+#
+# SUPPORTED ARTEFACT CONFIGURATIONS:
+#
+#   | Configuration | Format         | Use Case                   |
+#   |---------------|----------------|----------------------------|
+#   | exe           | Authenticode   | .exe, .dll files           |
+#   | msi           | Authenticode   | Windows installers         |
+#   | ps1           | Authenticode   | PowerShell scripts         |
+#   | docker        | Notation/cosign| Container images (future)  |
+#   | nupkg         | NuGet signing  | .NET packages (future)     |
+#
+# GRACEFUL DEGRADATION:
+#   If SIGNPATH_ORG_ID or SIGNPATH_PROJECT_SLUG are not set, the workflow
+#   skips signing and logs a warning rather than failing the release.
+#
+# ============================================================================
+
+name: Sign Artefacts
+
+on:
+  workflow_call:
+    inputs:
+      artifact_name:
+        description: 'Name of the uploaded Actions artefact to sign'
+        required: true
+        type: string
+      artifact_configuration:
+        description: 'SignPath artefact configuration (exe, msi, ps1, docker, nupkg)'
+        required: false
+        type: string
+        default: 'exe'
+      signing_policy:
+        description: 'SignPath signing policy slug'
+        required: false
+        type: string
+        default: 'release-signing'
+      project_slug:
+        description: 'SignPath project slug (overrides SIGNPATH_PROJECT_SLUG variable)'
+        required: false
+        type: string
+        default: ''
+      wait_timeout:
+        description: 'Maximum seconds to wait for signing to complete'
+        required: false
+        type: number
+        default: 600
+    outputs:
+      signing_outcome:
+        description: 'Result of signing — success, skipped, or failure'
+        value: ${{ jobs.sign.outputs.outcome }}
+
+permissions:
+  id-token: write
+  actions: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  sign:
+    name: 'Sign ${{ inputs.artifact_name }}'
+    runs-on: ubuntu-latest
+    outputs:
+      outcome: ${{ steps.sign.outputs.outcome }}
+
+    steps:
+      - name: Check signing prerequisites
+        id: preflight
+        env:
+          INPUT_PROJECT_SLUG: ${{ inputs.project_slug }}
+          VAR_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          VAR_ORG_ID: ${{ vars.SIGNPATH_ORG_ID }}
+        run: |
+          PROJECT="${INPUT_PROJECT_SLUG}"
+          [[ -z "$PROJECT" ]] && PROJECT="${VAR_PROJECT_SLUG}"
+          ORG_ID="${VAR_ORG_ID}"
+
+          if [[ -z "$ORG_ID" ]]; then
+            echo "⚠️ SIGNPATH_ORG_ID not set — skipping code signing"
+            echo "ℹ️ See: https://github.com/XAOSTECH/dev-control/blob/main/docs/SIGNING.md"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ -z "$PROJECT" ]]; then
+            echo "⚠️ SIGNPATH_PROJECT_SLUG not set — skipping code signing"
+            echo "ℹ️ Set the SIGNPATH_PROJECT_SLUG repo variable to enable signing"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "project_slug=${PROJECT}" >> "$GITHUB_OUTPUT"
+          echo "org_id=${ORG_ID}" >> "$GITHUB_OUTPUT"
+          echo "✅ Signing prerequisites met (org: ${ORG_ID}, project: ${PROJECT})"
+
+      - name: Download unsigned artefact
+        if: steps.preflight.outputs.skip != 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: unsigned/
+
+      - name: Submit signing request
+        id: sign
+        if: steps.preflight.outputs.skip != 'true'
+        uses: signpath/github-action-submit-signing-request@ced31329c0317e779dad2eec2a7c3bb46ea1343e # v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ steps.preflight.outputs.org_id }}
+          project-slug: ${{ steps.preflight.outputs.project_slug }}
+          signing-policy-slug: ${{ inputs.signing_policy }}
+          artifact-configuration-slug: ${{ inputs.artifact_configuration }}
+          github-artifact-id: ${{ inputs.artifact_name }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: ${{ inputs.wait_timeout }}
+          output-artifact-directory: signed/
+
+      - name: Re-upload signed artefact
+        if: steps.preflight.outputs.skip != 'true' && steps.sign.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: signed/
+          overwrite: true
+
+      - name: Report signing result
+        if: always()
+        env:
+          PREFLIGHT_SKIP: ${{ steps.preflight.outputs.skip }}
+          SIGN_OUTCOME: ${{ steps.sign.outcome }}
+          ARTIFACT_NAME: ${{ inputs.artifact_name }}
+        run: |
+          if [[ "$PREFLIGHT_SKIP" == "true" ]]; then
+            echo "outcome=skipped" >> "$GITHUB_OUTPUT"
+            echo "⏭️ Code signing was skipped (missing configuration)"
+          elif [[ "$SIGN_OUTCOME" == "success" ]]; then
+            echo "outcome=success" >> "$GITHUB_OUTPUT"
+            echo "✅ Artefact '${ARTIFACT_NAME}' signed successfully"
+          else
+            echo "outcome=failure" >> "$GITHUB_OUTPUT"
+            echo "❌ Signing failed for '${ARTIFACT_NAME}'"
+          fi
