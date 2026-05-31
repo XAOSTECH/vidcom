@@ -414,7 +414,7 @@ int vidcom_detector_detect(
     OrtValue* output_value = NULL;
     
     status = g_ort->Run(d->session, NULL,
-                         input_names, &input_value, 1,
+                         input_names, (const OrtValue* const*)&input_value, 1,
                          output_names, 1, &output_value);
     
     g_ort->ReleaseValue(input_value);
