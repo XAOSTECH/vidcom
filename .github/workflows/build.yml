@@ -1,0 +1,178 @@
+# Template created by https://github.com/XAOSTECH/dev-control
+# See templates folder documentation for details.
+
+# ============================================================================
+# Build Workflow Template (build.yml)
+# ============================================================================
+#
+# ORIGIN: https://github.com/XAOSTECH/dev-control
+# This workflow template is part of the dev-control toolkit.
+# See: https://github.com/XAOSTECH/dev-control/blob/main/workflows-templates/
+#
+# ============================================================================
+#
+# Cross-platform build template for compiled applications.
+# Designed to be auto-discovered and triggered by the release workflow.
+#
+# CONTRACT:
+#   The release.yml workflow auto-discovers build-*.yml files and:
+#   1. Triggers them via workflow_dispatch with a version input
+#   2. Waits for completion
+#   3. Downloads artifacts into the release
+#
+#   To be auto-discovered, this workflow MUST:
+#   - Be named build-*.yml (e.g., build-gui.yml, build-cli.yml)
+#   - Accept a 'version' input on both workflow_call and workflow_dispatch
+#   - Upload artifacts via actions/upload-artifact@v4
+#   - Optionally include SHA256SUMS.txt in the artifact for checksum verification
+#
+# CUSTOMISATION:
+#   - Rename this file to build-<component>.yml (e.g., build-gui.yml)
+#   - Change runs-on to your target platform (windows-latest, macos-latest, etc.)
+#   - Replace the build steps with your project's build commands
+#   - Update the artifact collection step to match your build outputs
+#
+# SUPPORTED PLATFORMS:
+#   - ubuntu-latest (Linux x86_64)
+#   - windows-latest (Windows x64)
+#   - macos-latest (macOS ARM64)
+#   - macos-13 (macOS x86_64)
+#
+# EXAMPLES:
+#   build-gui.yml       → .NET WinForms/WPF app on Windows
+#   build-cli.yml       → Go CLI binary on Linux
+#   build-electron.yml  → Electron app on all platforms
+#
+# ============================================================================
+
+name: 'Build {{COMPONENT_NAME}}'
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: 'Version string to embed (e.g. 1.0.0 or experimental)'
+        required: false
+        type: string
+        default: 'experimental'
+    outputs:
+      artifact_name:
+        description: 'Name of the uploaded artifact'
+        value: ${{ jobs.build.outputs.artifact_name }}
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version string to embed'
+        required: false
+        type: string
+        default: 'experimental'
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build:
+    name: 'Build {{COMPONENT_NAME}}'
+    runs-on: '{{BUILD_PLATFORM}}'  # e.g., windows-latest, ubuntu-latest, macos-latest
+    outputs:
+      artifact_name: ${{ steps.meta.outputs.artifact_name }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ====================================================================
+      # CUSTOMISE: SDK/toolchain setup
+      # ====================================================================
+      # Uncomment and configure the appropriate SDK for your project:
+      #
+      # .NET:
+      # - name: Setup .NET SDK
+      #   uses: actions/setup-dotnet@v4
+      #   with:
+      #     dotnet-version: '8.x'
+      #
+      # Node.js:
+      # - name: Setup Node.js
+      #   uses: actions/setup-node@v4
+      #   with:
+      #     node-version: '20'
+      #
+      # Go:
+      # - name: Setup Go
+      #   uses: actions/setup-go@v5
+      #   with:
+      #     go-version: '1.22'
+      #
+      # Python:
+      # - name: Setup Python
+      #   uses: actions/setup-python@v5
+      #   with:
+      #     python-version: '3.12'
+      # ====================================================================
+
+      - name: Set build metadata
+        id: meta
+        run: |
+          VER="${{ inputs.version }}"
+          if [[ -z "$VER" ]]; then VER="experimental"; fi
+          echo "version=$VER" >> $GITHUB_OUTPUT
+          echo "artifact_name={{ARTIFACT_NAME}}" >> $GITHUB_OUTPUT
+        shell: bash
+
+      # ====================================================================
+      # CUSTOMISE: Build commands
+      # ====================================================================
+      # Replace these steps with your project's actual build process.
+      #
+      # Example (.NET):
+      #   - name: Restore dependencies
+      #     run: dotnet restore src/MyApp.csproj
+      #   - name: Build Release
+      #     run: dotnet build src/MyApp.csproj -c Release --no-restore /p:InformationalVersion=${{ steps.meta.outputs.version }}
+      #
+      # Example (Go):
+      #   - name: Build
+      #     run: go build -ldflags "-X main.version=${{ steps.meta.outputs.version }}" -o output/myapp ./cmd/myapp
+      #
+      # Example (Node.js):
+      #   - name: Install & Build
+      #     run: npm ci && npm run build
+      # ====================================================================
+
+      - name: Build
+        run: |
+          echo "TODO: Replace with your build commands"
+          echo "Version: ${{ steps.meta.outputs.version }}"
+          mkdir -p artifact
+
+      # ====================================================================
+      # CUSTOMISE: Artifact collection
+      # ====================================================================
+      # Copy your build outputs to the artifact/ directory.
+      # Include a SHA256SUMS.txt for checksum verification in the release.
+      #
+      # The SHA256SUMS.txt format is: <hash>  <filename>
+      # (two spaces between hash and filename, standard sha256sum output)
+      # ====================================================================
+
+      - name: Collect artifacts
+        run: |
+          # TODO: Copy your build outputs to artifact/
+          # Example:
+          #   cp build/output/myapp artifact/
+          #   cp build/output/myapp.exe artifact/
+
+          # Generate checksums for all files in artifact/
+          cd artifact
+          sha256sum * > SHA256SUMS.txt 2>/dev/null || true
+          cd ..
+        shell: bash
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.artifact_name }}
+          path: artifact/
