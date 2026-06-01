@@ -3,10 +3,241 @@
     "repository": "vidcom",
     "current_branch": "main",
     "repo_url": "https://github.com/XAOSTECH/vidcom",
-    "generated": "2026-03-30T02:52:40Z",
+    "generated": "2026-06-01T04:27:40Z",
     "max_commits": 500
   },
   "commits": [
+    {
+      "sha": "29819367a73ca3668816bba3887efed79c1436c5",
+      "short": "2981936",
+      "parents": "5a6a0ca0f6c090b8a83829fbe7f0d3bb1ebc1701",
+      "author": "xaoscience",
+      "email": "69734795+xaoscience@users.noreply.github.com",
+      "date": "2026-05-31T21:13:31+02:00",
+      "timestamp": 1780254811,
+      "subject": "feat: add --continue flag to control progress resume in detect-fortnite.py",
+      "refs": "HEAD -> main, origin/main",
+      "position": {
+        "x": 600,
+        "y": 60,
+        "lane": 0,
+        "radius": 6,
+        "depth": 0,
+        "is_trunk": true,
+        "is_merge": false,
+        "is_fork": false
+      }
+    },
+    {
+      "sha": "5a6a0ca0f6c090b8a83829fbe7f0d3bb1ebc1701",
+      "short": "5a6a0ca",
+      "parents": "330dd665ddbfe4edfecf24d4b1a4a337400bcedb",
+      "author": "xaoscience",
+      "email": "69734795+xaoscience@users.noreply.github.com",
+      "date": "2026-05-31T21:12:49+02:00",
+      "timestamp": 1780254769,
+      "subject": "feat: add automatic progress saving and resume to detect-fortnite.py for long video support",
+      "refs": "",
+      "position": {
+        "x": 600,
+        "y": 100,
+        "lane": 0,
+        "radius": 6,
+        "depth": 1,
+        "is_trunk": true,
+        "is_merge": false,
+        "is_fork": false
+      }
+    },
+    {
+      "sha": "330dd665ddbfe4edfecf24d4b1a4a337400bcedb",
+      "short": "330dd66",
+      "parents": "c318b241943d254eb43f3c04c9b6bc7a0d1c3d46",
+      "author": "xaoscience",
+      "email": "69734795+xaoscience@users.noreply.github.com",
+      "date": "2026-05-31T20:48:36+02:00",
+      "timestamp": 1780253316,
+      "subject": "Fortnite OCR: only count highlights when kill counter increments (true kill detection)",
+      "refs": "",
+      "position": {
+        "x": 600,
+        "y": 140,
+        "lane": 0,
+        "radius": 6,
+        "depth": 2,
+        "is_trunk": true,
+        "is_merge": false,
+        "is_fork": false
+      }
+    },
+    {
+      "sha": "c318b241943d254eb43f3c04c9b6bc7a0d1c3d46",
+      "short": "c318b24",
+      "parents": "a414e6c436225473c6f2690b68ed0b37ed17cb9a",
+      "author": "xaoscience",
+      "email": "69734795+xaoscience@users.noreply.github.com",
+      "date": "2026-05-31T20:42:59+02:00",
+      "timestamp": 1780252979,
+      "subject": "Fortnite OCR: reduce polling to every 3 seconds (0.33fps) for efficient kill counter detection",
+      "refs": "",
+      "position": {
+        "x": 600,
+        "y": 180,
+        "lane": 0,
+        "radius": 6,
+        "depth": 3,
+        "is_trunk": true,
+        "is_merge": false,
+        "is_fork": false
+      }
+    },
+    {
+      "sha": "a414e6c436225473c6f2690b68ed0b37ed17cb9a",
+      "short": "a414e6c",
+      "parents": "dd44a61dcee03e36a26157a077a41b6607b12606",
+      "author": "xaoscience",
+      "email": "69734795+xaoscience@users.noreply.github.com",
+      "date": "2026-05-31T20:37:39+02:00",
+      "timestamp": 1780252659,
+      "subject": "Fortnite kill counter: add confirmed region and robust extraction script with image enhancement for OCR reliability",
+      "refs": "",
+      "position": {
+        "x": 600,
+        "y": 220,
+        "lane": 0,
+        "radius": 6,
+        "depth": 4,
+        "is_trunk": true,
+        "is_merge": false,
+        "is_fork": false
+      }
+    },
+    {
+      "sha": "dd44a61dcee03e36a26157a077a41b6607b12606",
+      "short": "dd44a61",
+      "parents": "0b9f1534465919dbbb4b67b7fcc4c5708fb3aaa0",
+      "author": "xaoscience",
+      "email": "69734795+xaoscience@users.noreply.github.com",
+      "date": "2026-05-31T20:37:31+02:00",
+      "timestamp": 1780252651,
+      "subject": "Pipeline: OCR stack install, player filter, and Fortnite OCR integration; training script updates",
+      "refs": "",
+      "position": {
+        "x": 600,
+        "y": 260,
+        "lane": 0,
+        "radius": 6,
+        "depth": 5,
+        "is_trunk": true,
+        "is_merge": false,
+        "is_fork": false
+      }
+    },
+    {
+      "sha": "0b9f1534465919dbbb4b67b7fcc4c5708fb3aaa0",
+      "short": "0b9f153",
+      "parents": "42fcb6fe78980773258cafe151b0eee953e908dc",
+      "author": "xaoscience",
+      "email": "69734795+xaoscience@users.noreply.github.com",
+      "date": "2026-05-31T19:25:07+02:00",
+      "timestamp": 1780248307,
+      "subject": "Fix incompatible pointer type in OrtValue Run call for GCC 15",
+      "refs": "",
+      "position": {
+        "x": 600,
+        "y": 300,
+        "lane": 0,
+        "radius": 6,
+        "depth": 6,
+        "is_trunk": true,
+        "is_merge": false,
+        "is_fork": false
+      }
+    },
+    {
+      "sha": "42fcb6fe78980773258cafe151b0eee953e908dc",
+      "short": "42fcb6f",
+      "parents": "c6974f926a949207da9715954477663feec1110c",
+      "author": "xaoscience",
+      "email": "69734795+xaoscience@users.noreply.github.com",
+      "date": "2026-05-31T18:39:12+02:00",
+      "timestamp": 1780245552,
+      "subject": "chore: update actions + workflows",
+      "refs": "",
+      "position": {
+        "x": 600,
+        "y": 340,
+        "lane": 0,
+        "radius": 6,
+        "depth": 7,
+        "is_trunk": true,
+        "is_merge": false,
+        "is_fork": false
+      }
+    },
+    {
+      "sha": "c6974f926a949207da9715954477663feec1110c",
+      "short": "c6974f9",
+      "parents": "9ce89f777e08667cee4a450c777061de0bffedae 9f0c796bf42bd42a2e3acee9083c5e34429c37c8",
+      "author": "xaostech[bot]",
+      "email": "260314499+xaostech[bot]@users.noreply.github.com",
+      "date": "2026-04-01T02:13:24Z",
+      "timestamp": 1775009604,
+      "subject": "Merge pull request #3 from XAOSTECH:anglicise/20260401-021254",
+      "refs": "",
+      "position": {
+        "x": 600,
+        "y": 380,
+        "lane": 0,
+        "radius": 10,
+        "depth": 8,
+        "is_trunk": true,
+        "is_merge": true,
+        "is_fork": false
+      }
+    },
+    {
+      "sha": "9f0c796bf42bd42a2e3acee9083c5e34429c37c8",
+      "short": "9f0c796",
+      "parents": "9ce89f777e08667cee4a450c777061de0bffedae",
+      "author": "xaos-bot",
+      "email": "262248812+xaos-bot@users.noreply.github.com",
+      "date": "2026-04-01T02:12:54Z",
+      "timestamp": 1775009574,
+      "subject": "chore: convert American spellings to British English",
+      "refs": "",
+      "position": {
+        "x": 720,
+        "y": 420,
+        "lane": 1,
+        "radius": 6,
+        "depth": 9,
+        "is_trunk": false,
+        "is_merge": false,
+        "is_fork": false
+      }
+    },
+    {
+      "sha": "9ce89f777e08667cee4a450c777061de0bffedae",
+      "short": "9ce89f7",
+      "parents": "20b3c6f9ac24a66f418239bfef218bbd2aa4bf2e",
+      "author": "xaos-bot",
+      "email": "262248812+xaos-bot@users.noreply.github.com",
+      "date": "2026-03-30T02:52:40Z",
+      "timestamp": 1774839160,
+      "subject": "chore: update git tree visualisation",
+      "refs": "",
+      "position": {
+        "x": 600,
+        "y": 500,
+        "lane": 0,
+        "radius": 9,
+        "depth": 10,
+        "is_trunk": true,
+        "is_merge": false,
+        "is_fork": true
+      }
+    },
     {
       "sha": "20b3c6f9ac24a66f418239bfef218bbd2aa4bf2e",
       "short": "20b3c6f",
@@ -16,13 +247,13 @@
       "date": "2026-03-23T17:55:15+01:00",
       "timestamp": 1774284915,
       "subject": "chore(dc-init): load workflows,actions",
-      "refs": "HEAD -> main, origin/main",
+      "refs": "",
       "position": {
         "x": 600,
-        "y": 60,
+        "y": 540,
         "lane": 0,
         "radius": 6,
-        "depth": 0,
+        "depth": 11,
         "is_trunk": true,
         "is_merge": false,
         "is_fork": false
@@ -40,10 +271,10 @@
       "refs": "",
       "position": {
         "x": 600,
-        "y": 100,
+        "y": 580,
         "lane": 0,
         "radius": 6,
-        "depth": 1,
+        "depth": 12,
         "is_trunk": true,
         "is_merge": false,
         "is_fork": false
@@ -61,10 +292,10 @@
       "refs": "",
       "position": {
         "x": 600,
-        "y": 140,
+        "y": 620,
         "lane": 0,
         "radius": 6,
-        "depth": 2,
+        "depth": 13,
         "is_trunk": true,
         "is_merge": false,
         "is_fork": false
@@ -82,10 +313,10 @@
       "refs": "",
       "position": {
         "x": 600,
-        "y": 180,
+        "y": 660,
         "lane": 0,
         "radius": 6,
-        "depth": 3,
+        "depth": 14,
         "is_trunk": true,
         "is_merge": false,
         "is_fork": false
@@ -103,10 +334,10 @@
       "refs": "",
       "position": {
         "x": 600,
-        "y": 220,
+        "y": 700,
         "lane": 0,
         "radius": 10,
-        "depth": 4,
+        "depth": 15,
         "is_trunk": true,
         "is_merge": true,
         "is_fork": false
@@ -123,11 +354,11 @@
       "subject": "chore: convert American spellings to British English",
       "refs": "",
       "position": {
-        "x": 720,
-        "y": 260,
-        "lane": 1,
+        "x": 480,
+        "y": 740,
+        "lane": -1,
         "radius": 6,
-        "depth": 5,
+        "depth": 16,
         "is_trunk": false,
         "is_merge": false,
         "is_fork": false
@@ -145,10 +376,10 @@
       "refs": "",
       "position": {
         "x": 600,
-        "y": 340,
+        "y": 820,
         "lane": 0,
         "radius": 9,
-        "depth": 6,
+        "depth": 17,
         "is_trunk": true,
         "is_merge": false,
         "is_fork": true
@@ -165,11 +396,11 @@
       "subject": "chore: convert American spellings to British English",
       "refs": "origin/anglicise/20260223-000304",
       "position": {
-        "x": 480,
-        "y": 380,
-        "lane": -1,
+        "x": 840,
+        "y": 860,
+        "lane": 2,
         "radius": 6,
-        "depth": 7,
+        "depth": 18,
         "is_trunk": false,
         "is_merge": false,
         "is_fork": false
@@ -187,10 +418,10 @@
       "refs": "",
       "position": {
         "x": 600,
-        "y": 460,
+        "y": 940,
         "lane": 0,
         "radius": 9,
-        "depth": 8,
+        "depth": 19,
         "is_trunk": true,
         "is_merge": false,
         "is_fork": true
@@ -208,10 +439,10 @@
       "refs": "",
       "position": {
         "x": 600,
-        "y": 500,
+        "y": 980,
         "lane": 0,
         "radius": 6,
-        "depth": 9,
+        "depth": 20,
         "is_trunk": true,
         "is_merge": false,
         "is_fork": false
@@ -229,10 +460,10 @@
       "refs": "",
       "position": {
         "x": 600,
-        "y": 540,
+        "y": 1020,
         "lane": 0,
         "radius": 6,
-        "depth": 10,
+        "depth": 21,
         "is_trunk": true,
         "is_merge": false,
         "is_fork": false
@@ -250,10 +481,10 @@
       "refs": "",
       "position": {
         "x": 600,
-        "y": 580,
+        "y": 1060,
         "lane": 0,
         "radius": 6,
-        "depth": 11,
+        "depth": 22,
         "is_trunk": true,
         "is_merge": false,
         "is_fork": false
@@ -271,10 +502,10 @@
       "refs": "",
       "position": {
         "x": 600,
-        "y": 620,
+        "y": 1100,
         "lane": 0,
         "radius": 6,
-        "depth": 12,
+        "depth": 23,
         "is_trunk": true,
         "is_merge": false,
         "is_fork": false
@@ -292,10 +523,10 @@
       "refs": "",
       "position": {
         "x": 600,
-        "y": 660,
+        "y": 1140,
         "lane": 0,
         "radius": 6,
-        "depth": 13,
+        "depth": 24,
         "is_trunk": true,
         "is_merge": false,
         "is_fork": false
@@ -313,10 +544,10 @@
       "refs": "",
       "position": {
         "x": 600,
-        "y": 700,
+        "y": 1180,
         "lane": 0,
         "radius": 6,
-        "depth": 14,
+        "depth": 25,
         "is_trunk": true,
         "is_merge": false,
         "is_fork": false
@@ -334,10 +565,10 @@
       "refs": "",
       "position": {
         "x": 600,
-        "y": 740,
+        "y": 1220,
         "lane": 0,
         "radius": 6,
-        "depth": 15,
+        "depth": 26,
         "is_trunk": true,
         "is_merge": false,
         "is_fork": false
@@ -355,10 +586,10 @@
       "refs": "",
       "position": {
         "x": 600,
-        "y": 780,
+        "y": 1260,
         "lane": 0,
         "radius": 6,
-        "depth": 16,
+        "depth": 27,
         "is_trunk": true,
         "is_merge": false,
         "is_fork": false
@@ -376,10 +607,10 @@
       "refs": "",
       "position": {
         "x": 600,
-        "y": 820,
+        "y": 1300,
         "lane": 0,
         "radius": 6,
-        "depth": 17,
+        "depth": 28,
         "is_trunk": true,
         "is_merge": false,
         "is_fork": false
@@ -397,10 +628,10 @@
       "refs": "",
       "position": {
         "x": 600,
-        "y": 860,
+        "y": 1340,
         "lane": 0,
         "radius": 6,
-        "depth": 18,
+        "depth": 29,
         "is_trunk": true,
         "is_merge": false,
         "is_fork": false
@@ -418,10 +649,10 @@
       "refs": "",
       "position": {
         "x": 600,
-        "y": 900,
+        "y": 1380,
         "lane": 0,
         "radius": 6,
-        "depth": 19,
+        "depth": 30,
         "is_trunk": true,
         "is_merge": false,
         "is_fork": false
@@ -430,7 +661,7 @@
   ],
   "branches": [
     {
-      "name": "20b3c6f9ac24a66f418239bfef218bbd2aa4bf2e chore(dc-init): load workflows,actions",
+      "name": "29819367a73ca3668816bba3887efed79c1436c5 feat: add --continue flag to control progress resume in detect-fortnite.py",
       "sha": "*",
       "current": false,
       "merged": false
