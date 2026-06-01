@@ -3,10 +3,131 @@
     "repository": "vidcom",
     "current_branch": "main",
     "repo_url": "https://github.com/XAOSTECH/vidcom",
-    "generated": "2026-03-30T02:52:40Z",
+    "generated": "2026-06-01T04:27:40Z",
     "max_commits": 500
   },
   "commits": [
+  {
+    "sha": "29819367a73ca3668816bba3887efed79c1436c5",
+    "short": "2981936",
+    "parents": "5a6a0ca0f6c090b8a83829fbe7f0d3bb1ebc1701",
+    "author": "xaoscience",
+    "email": "69734795+xaoscience@users.noreply.github.com",
+    "date": "2026-05-31T21:13:31+02:00",
+    "timestamp": 1780254811,
+    "subject": "feat: add --continue flag to control progress resume in detect-fortnite.py",
+    "refs": "HEAD -> main, origin/main"
+  },
+  {
+    "sha": "5a6a0ca0f6c090b8a83829fbe7f0d3bb1ebc1701",
+    "short": "5a6a0ca",
+    "parents": "330dd665ddbfe4edfecf24d4b1a4a337400bcedb",
+    "author": "xaoscience",
+    "email": "69734795+xaoscience@users.noreply.github.com",
+    "date": "2026-05-31T21:12:49+02:00",
+    "timestamp": 1780254769,
+    "subject": "feat: add automatic progress saving and resume to detect-fortnite.py for long video support",
+    "refs": ""
+  },
+  {
+    "sha": "330dd665ddbfe4edfecf24d4b1a4a337400bcedb",
+    "short": "330dd66",
+    "parents": "c318b241943d254eb43f3c04c9b6bc7a0d1c3d46",
+    "author": "xaoscience",
+    "email": "69734795+xaoscience@users.noreply.github.com",
+    "date": "2026-05-31T20:48:36+02:00",
+    "timestamp": 1780253316,
+    "subject": "Fortnite OCR: only count highlights when kill counter increments (true kill detection)",
+    "refs": ""
+  },
+  {
+    "sha": "c318b241943d254eb43f3c04c9b6bc7a0d1c3d46",
+    "short": "c318b24",
+    "parents": "a414e6c436225473c6f2690b68ed0b37ed17cb9a",
+    "author": "xaoscience",
+    "email": "69734795+xaoscience@users.noreply.github.com",
+    "date": "2026-05-31T20:42:59+02:00",
+    "timestamp": 1780252979,
+    "subject": "Fortnite OCR: reduce polling to every 3 seconds (0.33fps) for efficient kill counter detection",
+    "refs": ""
+  },
+  {
+    "sha": "a414e6c436225473c6f2690b68ed0b37ed17cb9a",
+    "short": "a414e6c",
+    "parents": "dd44a61dcee03e36a26157a077a41b6607b12606",
+    "author": "xaoscience",
+    "email": "69734795+xaoscience@users.noreply.github.com",
+    "date": "2026-05-31T20:37:39+02:00",
+    "timestamp": 1780252659,
+    "subject": "Fortnite kill counter: add confirmed region and robust extraction script with image enhancement for OCR reliability",
+    "refs": ""
+  },
+  {
+    "sha": "dd44a61dcee03e36a26157a077a41b6607b12606",
+    "short": "dd44a61",
+    "parents": "0b9f1534465919dbbb4b67b7fcc4c5708fb3aaa0",
+    "author": "xaoscience",
+    "email": "69734795+xaoscience@users.noreply.github.com",
+    "date": "2026-05-31T20:37:31+02:00",
+    "timestamp": 1780252651,
+    "subject": "Pipeline: OCR stack install, player filter, and Fortnite OCR integration; training script updates",
+    "refs": ""
+  },
+  {
+    "sha": "0b9f1534465919dbbb4b67b7fcc4c5708fb3aaa0",
+    "short": "0b9f153",
+    "parents": "42fcb6fe78980773258cafe151b0eee953e908dc",
+    "author": "xaoscience",
+    "email": "69734795+xaoscience@users.noreply.github.com",
+    "date": "2026-05-31T19:25:07+02:00",
+    "timestamp": 1780248307,
+    "subject": "Fix incompatible pointer type in OrtValue Run call for GCC 15",
+    "refs": ""
+  },
+  {
+    "sha": "42fcb6fe78980773258cafe151b0eee953e908dc",
+    "short": "42fcb6f",
+    "parents": "c6974f926a949207da9715954477663feec1110c",
+    "author": "xaoscience",
+    "email": "69734795+xaoscience@users.noreply.github.com",
+    "date": "2026-05-31T18:39:12+02:00",
+    "timestamp": 1780245552,
+    "subject": "chore: update actions + workflows",
+    "refs": ""
+  },
+  {
+    "sha": "c6974f926a949207da9715954477663feec1110c",
+    "short": "c6974f9",
+    "parents": "9ce89f777e08667cee4a450c777061de0bffedae 9f0c796bf42bd42a2e3acee9083c5e34429c37c8",
+    "author": "xaostech[bot]",
+    "email": "260314499+xaostech[bot]@users.noreply.github.com",
+    "date": "2026-04-01T02:13:24Z",
+    "timestamp": 1775009604,
+    "subject": "Merge pull request #3 from XAOSTECH:anglicise/20260401-021254",
+    "refs": ""
+  },
+  {
+    "sha": "9f0c796bf42bd42a2e3acee9083c5e34429c37c8",
+    "short": "9f0c796",
+    "parents": "9ce89f777e08667cee4a450c777061de0bffedae",
+    "author": "xaos-bot",
+    "email": "262248812+xaos-bot@users.noreply.github.com",
+    "date": "2026-04-01T02:12:54Z",
+    "timestamp": 1775009574,
+    "subject": "chore: convert American spellings to British English",
+    "refs": ""
+  },
+  {
+    "sha": "9ce89f777e08667cee4a450c777061de0bffedae",
+    "short": "9ce89f7",
+    "parents": "20b3c6f9ac24a66f418239bfef218bbd2aa4bf2e",
+    "author": "xaos-bot",
+    "email": "262248812+xaos-bot@users.noreply.github.com",
+    "date": "2026-03-30T02:52:40Z",
+    "timestamp": 1774839160,
+    "subject": "chore: update git tree visualisation",
+    "refs": ""
+  },
   {
     "sha": "20b3c6f9ac24a66f418239bfef218bbd2aa4bf2e",
     "short": "20b3c6f",
@@ -16,7 +137,7 @@
     "date": "2026-03-23T17:55:15+01:00",
     "timestamp": 1774284915,
     "subject": "chore(dc-init): load workflows,actions",
-    "refs": "HEAD -> main, origin/main"
+    "refs": ""
   },
   {
     "sha": "2133034da6beb962bdb5c7a29e04857357d3d1d8",
@@ -229,7 +350,7 @@
   }
 ],
   "branches": [
-  {"name":"20b3c6f9ac24a66f418239bfef218bbd2aa4bf2e chore(dc-init): load workflows,actions","sha":"*","current":false,"merged":false}
+  {"name":"29819367a73ca3668816bba3887efed79c1436c5 feat: add --continue flag to control progress resume in detect-fortnite.py","sha":"*","current":false,"merged":false}
 ],
   "tags": [
 
