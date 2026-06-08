@@ -3,10 +3,21 @@
     "repository": "vidcom",
     "current_branch": "main",
     "repo_url": "https://github.com/XAOSTECH/vidcom",
-    "generated": "2026-06-01T04:27:40Z",
+    "generated": "2026-06-08T04:23:09Z",
     "max_commits": 500
   },
   "commits": [
+  {
+    "sha": "fcd8511481a4ca60795dc7de900eee10f8817461",
+    "short": "fcd8511",
+    "parents": "29819367a73ca3668816bba3887efed79c1436c5",
+    "author": "xaos-bot",
+    "email": "262248812+xaos-bot@users.noreply.github.com",
+    "date": "2026-06-01T04:27:40Z",
+    "timestamp": 1780288060,
+    "subject": "chore: update git tree visualisation",
+    "refs": "HEAD -> main, origin/main"
+  },
   {
     "sha": "29819367a73ca3668816bba3887efed79c1436c5",
     "short": "2981936",
@@ -16,7 +27,7 @@
     "date": "2026-05-31T21:13:31+02:00",
     "timestamp": 1780254811,
     "subject": "feat: add --continue flag to control progress resume in detect-fortnite.py",
-    "refs": "HEAD -> main, origin/main"
+    "refs": ""
   },
   {
     "sha": "5a6a0ca0f6c090b8a83829fbe7f0d3bb1ebc1701",
@@ -350,7 +361,7 @@
   }
 ],
   "branches": [
-  {"name":"29819367a73ca3668816bba3887efed79c1436c5 feat: add --continue flag to control progress resume in detect-fortnite.py","sha":"*","current":false,"merged":false}
+  {"name":"fcd8511481a4ca60795dc7de900eee10f8817461 chore: update git tree visualisation","sha":"*","current":false,"merged":false}
 ],
   "tags": [
 
