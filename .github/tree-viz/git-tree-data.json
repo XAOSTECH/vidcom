@@ -3,10 +3,21 @@
     "repository": "vidcom",
     "current_branch": "main",
     "repo_url": "https://github.com/XAOSTECH/vidcom",
-    "generated": "2026-06-29T04:18:50Z",
+    "generated": "2026-07-06T03:56:25Z",
     "max_commits": 500
   },
   "commits": [
+  {
+    "sha": "5b5edc17d4a39701bb648ec5898c50b5a0470994",
+    "short": "5b5edc1",
+    "parents": "e43a170406409b1421443e71870ec07aa3613687",
+    "author": "xaos-bot",
+    "email": "262248812+xaos-bot@users.noreply.github.com",
+    "date": "2026-06-29T04:18:50Z",
+    "timestamp": 1782706730,
+    "subject": "chore: update git tree visualisation",
+    "refs": "HEAD -> main, origin/main"
+  },
   {
     "sha": "e43a170406409b1421443e71870ec07aa3613687",
     "short": "e43a170",
@@ -16,7 +27,7 @@
     "date": "2026-06-22T04:51:15Z",
     "timestamp": 1782103875,
     "subject": "chore: update git tree visualisation",
-    "refs": "HEAD -> main, origin/main"
+    "refs": ""
   },
   {
     "sha": "66fa4113656a57fa7a76d45c4c7eafbc84322260",
@@ -394,7 +405,7 @@
   }
 ],
   "branches": [
-  {"name":"e43a170406409b1421443e71870ec07aa3613687 chore: update git tree visualisation","sha":"*","current":false,"merged":false}
+  {"name":"5b5edc17d4a39701bb648ec5898c50b5a0470994 chore: update git tree visualisation","sha":"*","current":false,"merged":false}
 ],
   "tags": [
 
