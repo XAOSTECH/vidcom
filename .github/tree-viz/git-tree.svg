@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" 
      xmlns:xlink="http://www.w3.org/1999/xlink"
-     width="1200" height="1740" 
-     viewBox="0 0 1200 1740">
+     width="1200" height="1780" 
+     viewBox="0 0 1200 1780">
   <defs>
     <radialGradient id="leafGradient">
       <stop offset="0%" style="stop-color:#22c55e;stop-opacity:1" />
@@ -29,13 +29,13 @@
     </style>
   </defs>
   
-  <rect width="1200" height="1740" fill="#f8fafc"/>
+  <rect width="1200" height="1780" fill="#f8fafc"/>
   <defs>
     <pattern id="grid" width="100" height="100" patternUnits="userSpaceOnUse">
       <path d="M 100 0 L 0 0 0 100" fill="none" stroke="#e2e8f0" stroke-width="0.5" opacity="0.3"/>
     </pattern>
   </defs>
-  <rect width="1200" height="1740" fill="url(#grid)"/>
+  <rect width="1200" height="1780" fill="url(#grid)"/>
   
   <!-- Branch connection lines -->
   <g id="branches">
@@ -53,20 +53,20 @@
     <line class="trunk-line" x1="600" y1="500" x2="600" y2="540"/>
     <line class="trunk-line" x1="600" y1="540" x2="600" y2="580"/>
     <line class="trunk-line" x1="600" y1="580" x2="600" y2="620"/>
-    <line class="trunk-line" x1="600" y1="620" x2="600" y2="740"/>
-    <path class="branch-line" d="M 600 620 C 600 636, 720 644, 720 660"/>
-    <path class="branch-line" d="M 720 660 C 720 692, 600 708, 600 740"/>
-    <line class="trunk-line" x1="600" y1="740" x2="600" y2="780"/>
+    <line class="trunk-line" x1="600" y1="620" x2="600" y2="660"/>
+    <line class="trunk-line" x1="600" y1="660" x2="600" y2="780"/>
+    <path class="branch-line" d="M 600 660 C 600 676, 720 684, 720 700"/>
+    <path class="branch-line" d="M 720 700 C 720 732, 600 748, 600 780"/>
     <line class="trunk-line" x1="600" y1="780" x2="600" y2="820"/>
     <line class="trunk-line" x1="600" y1="820" x2="600" y2="860"/>
     <line class="trunk-line" x1="600" y1="860" x2="600" y2="900"/>
     <line class="trunk-line" x1="600" y1="900" x2="600" y2="940"/>
-    <line class="trunk-line" x1="600" y1="940" x2="600" y2="1060"/>
-    <path class="branch-line" d="M 600 940 C 600 956, 480 964, 480 980"/>
-    <path class="branch-line" d="M 480 980 C 480 1012, 600 1028, 600 1060"/>
-    <line class="trunk-line" x1="600" y1="1060" x2="600" y2="1180"/>
-    <path class="branch-line" d="M 840 1100 C 840 1132, 600 1148, 600 1180"/>
-    <line class="trunk-line" x1="600" y1="1180" x2="600" y2="1220"/>
+    <line class="trunk-line" x1="600" y1="940" x2="600" y2="980"/>
+    <line class="trunk-line" x1="600" y1="980" x2="600" y2="1100"/>
+    <path class="branch-line" d="M 600 980 C 600 996, 480 1004, 480 1020"/>
+    <path class="branch-line" d="M 480 1020 C 480 1052, 600 1068, 600 1100"/>
+    <line class="trunk-line" x1="600" y1="1100" x2="600" y2="1220"/>
+    <path class="branch-line" d="M 840 1140 C 840 1172, 600 1188, 600 1220"/>
     <line class="trunk-line" x1="600" y1="1220" x2="600" y2="1260"/>
     <line class="trunk-line" x1="600" y1="1260" x2="600" y2="1300"/>
     <line class="trunk-line" x1="600" y1="1300" x2="600" y2="1340"/>
@@ -77,46 +77,48 @@
     <line class="trunk-line" x1="600" y1="1500" x2="600" y2="1540"/>
     <line class="trunk-line" x1="600" y1="1540" x2="600" y2="1580"/>
     <line class="trunk-line" x1="600" y1="1580" x2="600" y2="1620"/>
+    <line class="trunk-line" x1="600" y1="1620" x2="600" y2="1660"/>
   </g>
   <!-- Commit nodes -->
   <g id="commits">
-    <circle class="commit-leaf" cx="600" cy="60" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>2bbcea4: chore: update git tree visualisation</title></circle>
-    <circle class="commit-leaf" cx="600" cy="100" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>5b5edc1: chore: update git tree visualisation</title></circle>
-    <circle class="commit-leaf" cx="600" cy="140" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>e43a170: chore: update git tree visualisation</title></circle>
-    <circle class="commit-leaf" cx="600" cy="180" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>66fa411: chore: update git tree visualisation</title></circle>
-    <circle class="commit-leaf" cx="600" cy="220" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>bde66ed: chore: update git tree visualisation</title></circle>
-    <circle class="commit-leaf" cx="600" cy="260" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>fcd8511: chore: update git tree visualisation</title></circle>
-    <circle class="commit-leaf" cx="600" cy="300" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>2981936: feat: add --continue flag to control progress resume in detect-fortnite.py</title></circle>
-    <circle class="commit-leaf" cx="600" cy="340" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>5a6a0ca: feat: add automatic progress saving and resume to detect-fortnite.py for long video support</title></circle>
-    <circle class="commit-leaf" cx="600" cy="380" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>330dd66: Fortnite OCR: only count highlights when kill counter increments (true kill detection)</title></circle>
-    <circle class="commit-leaf" cx="600" cy="420" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>c318b24: Fortnite OCR: reduce polling to every 3 seconds (0.33fps) for efficient kill counter detection</title></circle>
-    <circle class="commit-leaf" cx="600" cy="460" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>a414e6c: Fortnite kill counter: add confirmed region and robust extraction script with image enhancement for OCR reliability</title></circle>
-    <circle class="commit-leaf" cx="600" cy="500" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>dd44a61: Pipeline: OCR stack install, player filter, and Fortnite OCR integration; training script updates</title></circle>
-    <circle class="commit-leaf" cx="600" cy="540" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>0b9f153: Fix incompatible pointer type in OrtValue Run call for GCC 15</title></circle>
-    <circle class="commit-leaf" cx="600" cy="580" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>42fcb6f: chore: update actions + workflows</title></circle>
-    <circle class="commit-leaf" cx="600" cy="620" r="10" fill="url(#mergeGradient)" stroke="#7c3aed" stroke-width="1.5"><title>c6974f9: Merge pull request #3 from XAOSTECH:anglicise/20260401-021254</title></circle>
-    <circle class="commit-leaf" cx="720" cy="660" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>9f0c796: chore: convert American spellings to British English</title></circle>
-    <circle class="commit-leaf" cx="600" cy="740" r="9" fill="url(#forkGradient)" stroke="#ea580c" stroke-width="1.5"><title>9ce89f7: chore: update git tree visualisation</title></circle>
-    <circle class="commit-leaf" cx="600" cy="780" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>20b3c6f: chore(dc-init): load workflows,actions</title></circle>
-    <circle class="commit-leaf" cx="600" cy="820" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>2133034: chore: update git tree visualisation</title></circle>
-    <circle class="commit-leaf" cx="600" cy="860" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>995faf3: chore(dc-init): update workflows,actions</title></circle>
-    <circle class="commit-leaf" cx="600" cy="900" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>8663a88: chore(dc-init): update workflows and actions</title></circle>
-    <circle class="commit-leaf" cx="600" cy="940" r="10" fill="url(#mergeGradient)" stroke="#7c3aed" stroke-width="1.5"><title>d8b8368: Merge pull request #2 from XAOSTECH:anglicise/20260301-020200\n\nchore: Convert American spellings to British English</title></circle>
-    <circle class="commit-leaf" cx="480" cy="980" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>55810b3: chore: convert American spellings to British English</title></circle>
-    <circle class="commit-leaf" cx="600" cy="1060" r="9" fill="url(#forkGradient)" stroke="#ea580c" stroke-width="1.5"><title>30ebb8f: dc-init</title></circle>
-    <circle class="commit-leaf" cx="840" cy="1100" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>6eec922: chore: convert American spellings to British English</title></circle>
-    <circle class="commit-leaf" cx="600" cy="1180" r="9" fill="url(#forkGradient)" stroke="#ea580c" stroke-width="1.5"><title>60a8fb0: chore:refactor container</title></circle>
-    <circle class="commit-leaf" cx="600" cy="1220" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>5771e20: fix(devcontainer): recreate examples + add minimal configs</title></circle>
-    <circle class="commit-leaf" cx="600" cy="1260" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>db63b5d: fix(devcontainer): fix perm &amp;&amp; pip installation</title></circle>
-    <circle class="commit-leaf" cx="600" cy="1300" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>180cdc8: chore(devcontainer cleanup)</title></circle>
-    <circle class="commit-leaf" cx="600" cy="1340" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>cccf6a0: feat: add dynamic nvm, YOLOv8n ONNX, and example configs</title></circle>
-    <circle class="commit-leaf" cx="600" cy="1380" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>cf13e27: feat: add yt-dlp, sqlite3, cookie handling for video downloads</title></circle>
-    <circle class="commit-leaf" cx="600" cy="1420" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>acd8047: feat: Add YOLO-based gaming highlight detection</title></circle>
-    <circle class="commit-leaf" cx="600" cy="1460" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>137be8b: chore(cleanup)</title></circle>
-    <circle class="commit-leaf" cx="600" cy="1500" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>3b971b7: feat(v0.3): YouTube fetch + processed tracking + ResNet50 model</title></circle>
-    <circle class="commit-leaf" cx="600" cy="1540" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>3467eae: feat(chromium): container-optimized config with privacy hardening</title></circle>
-    <circle class="commit-leaf" cx="600" cy="1580" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>f5cced5: fix(chromium): detect symlink locks and improve container detection</title></circle>
-    <circle class="commit-leaf" cx="600" cy="1620" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>60fd3d3: feat(v0.2): complete VIDCOM pipeline implementation</title></circle>
+    <circle class="commit-leaf" cx="600" cy="60" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>ece533c: chore: update git tree visualisation</title></circle>
+    <circle class="commit-leaf" cx="600" cy="100" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>2bbcea4: chore: update git tree visualisation</title></circle>
+    <circle class="commit-leaf" cx="600" cy="140" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>5b5edc1: chore: update git tree visualisation</title></circle>
+    <circle class="commit-leaf" cx="600" cy="180" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>e43a170: chore: update git tree visualisation</title></circle>
+    <circle class="commit-leaf" cx="600" cy="220" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>66fa411: chore: update git tree visualisation</title></circle>
+    <circle class="commit-leaf" cx="600" cy="260" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>bde66ed: chore: update git tree visualisation</title></circle>
+    <circle class="commit-leaf" cx="600" cy="300" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>fcd8511: chore: update git tree visualisation</title></circle>
+    <circle class="commit-leaf" cx="600" cy="340" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>2981936: feat: add --continue flag to control progress resume in detect-fortnite.py</title></circle>
+    <circle class="commit-leaf" cx="600" cy="380" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>5a6a0ca: feat: add automatic progress saving and resume to detect-fortnite.py for long video support</title></circle>
+    <circle class="commit-leaf" cx="600" cy="420" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>330dd66: Fortnite OCR: only count highlights when kill counter increments (true kill detection)</title></circle>
+    <circle class="commit-leaf" cx="600" cy="460" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>c318b24: Fortnite OCR: reduce polling to every 3 seconds (0.33fps) for efficient kill counter detection</title></circle>
+    <circle class="commit-leaf" cx="600" cy="500" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>a414e6c: Fortnite kill counter: add confirmed region and robust extraction script with image enhancement for OCR reliability</title></circle>
+    <circle class="commit-leaf" cx="600" cy="540" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>dd44a61: Pipeline: OCR stack install, player filter, and Fortnite OCR integration; training script updates</title></circle>
+    <circle class="commit-leaf" cx="600" cy="580" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>0b9f153: Fix incompatible pointer type in OrtValue Run call for GCC 15</title></circle>
+    <circle class="commit-leaf" cx="600" cy="620" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>42fcb6f: chore: update actions + workflows</title></circle>
+    <circle class="commit-leaf" cx="600" cy="660" r="10" fill="url(#mergeGradient)" stroke="#7c3aed" stroke-width="1.5"><title>c6974f9: Merge pull request #3 from XAOSTECH:anglicise/20260401-021254</title></circle>
+    <circle class="commit-leaf" cx="720" cy="700" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>9f0c796: chore: convert American spellings to British English</title></circle>
+    <circle class="commit-leaf" cx="600" cy="780" r="9" fill="url(#forkGradient)" stroke="#ea580c" stroke-width="1.5"><title>9ce89f7: chore: update git tree visualisation</title></circle>
+    <circle class="commit-leaf" cx="600" cy="820" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>20b3c6f: chore(dc-init): load workflows,actions</title></circle>
+    <circle class="commit-leaf" cx="600" cy="860" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>2133034: chore: update git tree visualisation</title></circle>
+    <circle class="commit-leaf" cx="600" cy="900" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>995faf3: chore(dc-init): update workflows,actions</title></circle>
+    <circle class="commit-leaf" cx="600" cy="940" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>8663a88: chore(dc-init): update workflows and actions</title></circle>
+    <circle class="commit-leaf" cx="600" cy="980" r="10" fill="url(#mergeGradient)" stroke="#7c3aed" stroke-width="1.5"><title>d8b8368: Merge pull request #2 from XAOSTECH:anglicise/20260301-020200\n\nchore: Convert American spellings to British English</title></circle>
+    <circle class="commit-leaf" cx="480" cy="1020" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>55810b3: chore: convert American spellings to British English</title></circle>
+    <circle class="commit-leaf" cx="600" cy="1100" r="9" fill="url(#forkGradient)" stroke="#ea580c" stroke-width="1.5"><title>30ebb8f: dc-init</title></circle>
+    <circle class="commit-leaf" cx="840" cy="1140" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>6eec922: chore: convert American spellings to British English</title></circle>
+    <circle class="commit-leaf" cx="600" cy="1220" r="9" fill="url(#forkGradient)" stroke="#ea580c" stroke-width="1.5"><title>60a8fb0: chore:refactor container</title></circle>
+    <circle class="commit-leaf" cx="600" cy="1260" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>5771e20: fix(devcontainer): recreate examples + add minimal configs</title></circle>
+    <circle class="commit-leaf" cx="600" cy="1300" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>db63b5d: fix(devcontainer): fix perm &amp;&amp; pip installation</title></circle>
+    <circle class="commit-leaf" cx="600" cy="1340" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>180cdc8: chore(devcontainer cleanup)</title></circle>
+    <circle class="commit-leaf" cx="600" cy="1380" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>cccf6a0: feat: add dynamic nvm, YOLOv8n ONNX, and example configs</title></circle>
+    <circle class="commit-leaf" cx="600" cy="1420" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>cf13e27: feat: add yt-dlp, sqlite3, cookie handling for video downloads</title></circle>
+    <circle class="commit-leaf" cx="600" cy="1460" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>acd8047: feat: Add YOLO-based gaming highlight detection</title></circle>
+    <circle class="commit-leaf" cx="600" cy="1500" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>137be8b: chore(cleanup)</title></circle>
+    <circle class="commit-leaf" cx="600" cy="1540" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>3b971b7: feat(v0.3): YouTube fetch + processed tracking + ResNet50 model</title></circle>
+    <circle class="commit-leaf" cx="600" cy="1580" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>3467eae: feat(chromium): container-optimized config with privacy hardening</title></circle>
+    <circle class="commit-leaf" cx="600" cy="1620" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>f5cced5: fix(chromium): detect symlink locks and improve container detection</title></circle>
+    <circle class="commit-leaf" cx="600" cy="1660" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>60fd3d3: feat(v0.2): complete VIDCOM pipeline implementation</title></circle>
   </g>
   
   <!-- Legend -->
@@ -133,12 +135,12 @@
   </g>
   
   <!-- Repository info -->
-  <g id="info" transform="translate(20, 1700)">
+  <g id="info" transform="translate(20, 1740)">
     <text x="0" y="0" class="branch-label" font-size="12" fill="#666">
       Repository: vidcom
     </text>
     <text x="0" y="20" class="branch-label" font-size="10" fill="#999">
-      Generated: 2026-07-13 03:23:18 UTC
+      Generated: 2026-07-20 03:31:04 UTC
     </text>
   </g>
 </svg>

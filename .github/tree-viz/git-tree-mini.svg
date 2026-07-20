@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg"
      width="300" height="600"
-     viewBox="460 40 400 1600">
+     viewBox="460 40 400 1640">
   <style>
     @keyframes sway {
       0%   { transform: translateX(0); }
@@ -29,20 +29,20 @@
     <line class="mini-line" stroke="#4ade80" x1="600" y1="500" x2="600" y2="540"/>
     <line class="mini-line" stroke="#4ade80" x1="600" y1="540" x2="600" y2="580"/>
     <line class="mini-line" stroke="#4ade80" x1="600" y1="580" x2="600" y2="620"/>
-    <line class="mini-line" stroke="#4ade80" x1="600" y1="620" x2="600" y2="740"/>
-    <path class="mini-line" stroke="#64748b" d="M 600 620 C 600 636, 720 644, 720 660"/>
-    <path class="mini-line" stroke="#64748b" d="M 720 660 C 720 692, 600 708, 600 740"/>
-    <line class="mini-line" stroke="#4ade80" x1="600" y1="740" x2="600" y2="780"/>
+    <line class="mini-line" stroke="#4ade80" x1="600" y1="620" x2="600" y2="660"/>
+    <line class="mini-line" stroke="#4ade80" x1="600" y1="660" x2="600" y2="780"/>
+    <path class="mini-line" stroke="#64748b" d="M 600 660 C 600 676, 720 684, 720 700"/>
+    <path class="mini-line" stroke="#64748b" d="M 720 700 C 720 732, 600 748, 600 780"/>
     <line class="mini-line" stroke="#4ade80" x1="600" y1="780" x2="600" y2="820"/>
     <line class="mini-line" stroke="#4ade80" x1="600" y1="820" x2="600" y2="860"/>
     <line class="mini-line" stroke="#4ade80" x1="600" y1="860" x2="600" y2="900"/>
     <line class="mini-line" stroke="#4ade80" x1="600" y1="900" x2="600" y2="940"/>
-    <line class="mini-line" stroke="#4ade80" x1="600" y1="940" x2="600" y2="1060"/>
-    <path class="mini-line" stroke="#64748b" d="M 600 940 C 600 956, 480 964, 480 980"/>
-    <path class="mini-line" stroke="#64748b" d="M 480 980 C 480 1012, 600 1028, 600 1060"/>
-    <line class="mini-line" stroke="#4ade80" x1="600" y1="1060" x2="600" y2="1180"/>
-    <path class="mini-line" stroke="#64748b" d="M 840 1100 C 840 1132, 600 1148, 600 1180"/>
-    <line class="mini-line" stroke="#4ade80" x1="600" y1="1180" x2="600" y2="1220"/>
+    <line class="mini-line" stroke="#4ade80" x1="600" y1="940" x2="600" y2="980"/>
+    <line class="mini-line" stroke="#4ade80" x1="600" y1="980" x2="600" y2="1100"/>
+    <path class="mini-line" stroke="#64748b" d="M 600 980 C 600 996, 480 1004, 480 1020"/>
+    <path class="mini-line" stroke="#64748b" d="M 480 1020 C 480 1052, 600 1068, 600 1100"/>
+    <line class="mini-line" stroke="#4ade80" x1="600" y1="1100" x2="600" y2="1220"/>
+    <path class="mini-line" stroke="#64748b" d="M 840 1140 C 840 1172, 600 1188, 600 1220"/>
     <line class="mini-line" stroke="#4ade80" x1="600" y1="1220" x2="600" y2="1260"/>
     <line class="mini-line" stroke="#4ade80" x1="600" y1="1260" x2="600" y2="1300"/>
     <line class="mini-line" stroke="#4ade80" x1="600" y1="1300" x2="600" y2="1340"/>
@@ -53,6 +53,7 @@
     <line class="mini-line" stroke="#4ade80" x1="600" y1="1500" x2="600" y2="1540"/>
     <line class="mini-line" stroke="#4ade80" x1="600" y1="1540" x2="600" y2="1580"/>
     <line class="mini-line" stroke="#4ade80" x1="600" y1="1580" x2="600" y2="1620"/>
+    <line class="mini-line" stroke="#4ade80" x1="600" y1="1620" x2="600" y2="1660"/>
     <circle cx="600" cy="60" r="4" fill="#4ade80" opacity="0.9"/>
     <circle cx="600" cy="100" r="4" fill="#4ade80" opacity="0.9"/>
     <circle cx="600" cy="140" r="4" fill="#4ade80" opacity="0.9"/>
@@ -67,19 +68,19 @@
     <circle cx="600" cy="500" r="4" fill="#4ade80" opacity="0.9"/>
     <circle cx="600" cy="540" r="4" fill="#4ade80" opacity="0.9"/>
     <circle cx="600" cy="580" r="4" fill="#4ade80" opacity="0.9"/>
-    <circle cx="600" cy="620" r="7" fill="#c084fc" opacity="0.9"/>
-    <circle cx="720" cy="660" r="4" fill="#4ade80" opacity="0.9"/>
-    <circle cx="600" cy="740" r="6" fill="#fb923c" opacity="0.9"/>
-    <circle cx="600" cy="780" r="4" fill="#4ade80" opacity="0.9"/>
+    <circle cx="600" cy="620" r="4" fill="#4ade80" opacity="0.9"/>
+    <circle cx="600" cy="660" r="7" fill="#c084fc" opacity="0.9"/>
+    <circle cx="720" cy="700" r="4" fill="#4ade80" opacity="0.9"/>
+    <circle cx="600" cy="780" r="6" fill="#fb923c" opacity="0.9"/>
     <circle cx="600" cy="820" r="4" fill="#4ade80" opacity="0.9"/>
     <circle cx="600" cy="860" r="4" fill="#4ade80" opacity="0.9"/>
     <circle cx="600" cy="900" r="4" fill="#4ade80" opacity="0.9"/>
-    <circle cx="600" cy="940" r="7" fill="#c084fc" opacity="0.9"/>
-    <circle cx="480" cy="980" r="4" fill="#4ade80" opacity="0.9"/>
-    <circle cx="600" cy="1060" r="6" fill="#fb923c" opacity="0.9"/>
-    <circle cx="840" cy="1100" r="4" fill="#4ade80" opacity="0.9"/>
-    <circle cx="600" cy="1180" r="6" fill="#fb923c" opacity="0.9"/>
-    <circle cx="600" cy="1220" r="4" fill="#4ade80" opacity="0.9"/>
+    <circle cx="600" cy="940" r="4" fill="#4ade80" opacity="0.9"/>
+    <circle cx="600" cy="980" r="7" fill="#c084fc" opacity="0.9"/>
+    <circle cx="480" cy="1020" r="4" fill="#4ade80" opacity="0.9"/>
+    <circle cx="600" cy="1100" r="6" fill="#fb923c" opacity="0.9"/>
+    <circle cx="840" cy="1140" r="4" fill="#4ade80" opacity="0.9"/>
+    <circle cx="600" cy="1220" r="6" fill="#fb923c" opacity="0.9"/>
     <circle cx="600" cy="1260" r="4" fill="#4ade80" opacity="0.9"/>
     <circle cx="600" cy="1300" r="4" fill="#4ade80" opacity="0.9"/>
     <circle cx="600" cy="1340" r="4" fill="#4ade80" opacity="0.9"/>
@@ -90,5 +91,6 @@
     <circle cx="600" cy="1540" r="4" fill="#4ade80" opacity="0.9"/>
     <circle cx="600" cy="1580" r="4" fill="#4ade80" opacity="0.9"/>
     <circle cx="600" cy="1620" r="4" fill="#4ade80" opacity="0.9"/>
+    <circle cx="600" cy="1660" r="4" fill="#4ade80" opacity="0.9"/>
   </g>
 </svg>
