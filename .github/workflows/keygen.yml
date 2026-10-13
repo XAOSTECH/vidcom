@@ -1,0 +1,218 @@
+# Template created by https://github.com/XAOSTECH/dev-control
+# See templates folder documentation for details.
+
+# ============================================================================
+# Bot GPG Key Rotation Workflow Template (keygen.yml)
+# ============================================================================
+#
+# ORIGIN: https://github.com/XAOSTECH/dev-control
+# This workflow template is part of the dev-control toolkit.
+#
+# ============================================================================
+#
+# One-click rotation of the bot GPG signing key. Generates a new key pair in an ephemeral runner keyring, immediately pushes the private key and passphrase as org (or repo) secrets, then registers the public key to the bot account using the user token. Private key material is piped directly and never stored in any log, output, or intermediate file.
+#
+# PREREQUISITES:
+#   - GitHub App must have "Organisation permissions → Secrets → Read and write" in its App settings
+#     (github.com/settings/apps → your App → Permissions). After changing, the org installation must re-approve.
+#     Alternative: store a fine-grained PAT with "Organisation secrets: write" as USER_TOKEN_SECRET — the
+#     workflow uses it as a fallback and prefers it over expanding any classic PAT to admin:org scope.
+#   - USER_TOKEN_SECRET must be a classic or fine-grained PAT for the bot account with write:gpg_key scope
+#     (required for the pubkey-registration step; separate from secret-write permissions).
+#   - config/profiles/*_gpg.yml defines Key-Type, Key-Length, and Expire-Date
+#
+# ============================================================================
+
+name: Rotate Bot GPG Key
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Report the rotation plan without making any changes'
+        required: false
+        type: boolean
+        default: false
+      scope:
+        description: 'Secret scope (org or repo)'
+        required: false
+        type: choice
+        options:
+          - org
+          - repo
+        default: org
+
+permissions:
+  contents: read
+
+# Never cancel a rotation mid-flight — partial secret updates would break signing.
+concurrency:
+  group: keygen-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  rotate:
+    name: Rotate Bot GPG Key
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Generate App Token
+        id: app_token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets['XB_AI'] }}
+          private-key: ${{ secrets['XB_PK'] }}
+
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          token: ${{ steps.app_token.outputs.token }}
+
+      # Preflight: verify secrets-write access BEFORE generating any key material.
+      # Failing here is safe — no cryptographic material has been produced or consumed yet.
+      - name: Preflight — verify secrets write permission
+        id: preflight
+        if: ${{ !inputs.dry_run }}
+        env:
+          APP_TOKEN: ${{ steps.app_token.outputs.token }}
+          USER_TOKEN: ${{ secrets['XB_UT'] }}
+          SCOPE: ${{ inputs.scope }}
+        run: |
+          _ok=false
+          # Try the App token first (requires Secrets: write org permission on the App installation).
+          if GH_TOKEN="$APP_TOKEN" gh api \
+              "$([[ "$SCOPE" == org ]] && echo "orgs/${{ github.repository_owner }}" || echo "repos/${{ github.repository }}")/actions/secrets/public-key" \
+              &>/dev/null 2>&1; then
+            echo "✅ App token has secrets write permission — will be used for secret operations" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "token_for_secrets=app" >> "$GITHUB_OUTPUT"
+            _ok=true
+          elif [[ -n "$USER_TOKEN" ]] && GH_TOKEN="$USER_TOKEN" gh api \
+              "$([[ "$SCOPE" == org ]] && echo "orgs/${{ github.repository_owner }}" || echo "repos/${{ github.repository }}")/actions/secrets/public-key" \
+              &>/dev/null 2>&1; then
+            echo "✅ USER_TOKEN_SECRET has secrets write permission — will be used as fallback" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "ℹ️ Preferred: grant the GitHub App 'Organisation permissions → Secrets → Read and write' to avoid needing this PAT for secret writes." | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "token_for_secrets=user" >> "$GITHUB_OUTPUT"
+            _ok=true
+          fi
+          if [[ "$_ok" == false ]]; then
+            echo "❌ Neither the App token nor USER_TOKEN_SECRET can access the secrets API." | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "To fix (choose one):" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "  1. GitHub App settings → Permissions → Organisation permissions → Secrets → Read and write" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "     Then re-approve the installation at: github.com/organizations/${{ github.repository_owner }}/settings/installations" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "  2. Store a fine-grained PAT with 'Organisation secrets: write' as XB_UT" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "     (fine-grained PATs support targeted secret write without admin:org scope)" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+      - name: Dry-run report
+        if: ${{ inputs.dry_run }}
+        env:
+          BOT_NAME: ${{ vars.BOT_NAME || 'xaos-bot' }}
+          BOT_EMAIL: '262248812+xaos-bot@users.noreply.github.com'
+        run: |
+          echo "## 🔍 Dry Run — Rotation Plan" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Bot identity:** ${BOT_NAME} <${BOT_EMAIL}>" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Scope:** \`${{ inputs.scope }}\` on \`${{ github.repository_owner }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Secrets to rotate:** \`XB_GK\`, \`XB_GP\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Registration via:** \`XB_UT\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "_No changes made._" >> "$GITHUB_STEP_SUMMARY"
+          echo "Run without dry_run=true to apply."
+
+      - name: Generate GPG key and rotate secrets
+        id: keygen
+        if: ${{ !inputs.dry_run }}
+        env:
+          APP_TOKEN: ${{ steps.app_token.outputs.token }}
+          USER_TOKEN: ${{ secrets['XB_UT'] }}
+          TOKEN_SOURCE: ${{ steps.preflight.outputs.token_for_secrets }}
+          BOT_NAME: ${{ vars.BOT_NAME || 'xaos-bot' }}
+          BOT_EMAIL: '262248812+xaos-bot@users.noreply.github.com'
+          SCOPE: ${{ inputs.scope }}
+          ORG: ${{ github.repository_owner }}
+          REPO: ${{ github.repository }}
+        run: |
+          [[ -z "$BOT_NAME" || -z "$BOT_EMAIL" ]] && { echo "❌ BOT_NAME / BOT_EMAIL not resolved"; exit 1; }
+
+          # Read algorithm settings from the bot profile; identity comes from env
+          _PROFILE=$(ls config/profiles/*bot*_gpg.yml config/profiles/*_gpg.yml 2>/dev/null | head -1 || true)
+          KEY_TYPE=$(grep "^Key-Type:"   "${_PROFILE:-/dev/null}" 2>/dev/null | awk '{print $2}' || echo "RSA")
+          KEY_LEN=$( grep "^Key-Length:" "${_PROFILE:-/dev/null}" 2>/dev/null | awk '{print $2}' || echo "4096")
+          EXPIRE=$(  grep "^Expire-Date:" "${_PROFILE:-/dev/null}" 2>/dev/null | awk '{print $2}' || echo "1y")
+
+          _HOME=$(mktemp -d); chmod 700 "$_HOME"
+          _PASS=$(openssl rand -base64 32)
+          echo "::add-mask::$_PASS"
+          _BATCH=$(mktemp); chmod 600 "$_BATCH"
+          cat > "$_BATCH" <<BATCHEOF
+          Key-Type: $KEY_TYPE
+          Key-Length: $KEY_LEN
+          Name-Real: $BOT_NAME
+          Name-Email: $BOT_EMAIL
+          Expire-Date: $EXPIRE
+          Passphrase: $_PASS
+          %commit
+          BATCHEOF
+
+          GNUPGHOME="$_HOME" gpg --batch --pinentry-mode loopback --gen-key "$_BATCH" 2>/dev/null
+          rm -f "$_BATCH"
+
+          _FPR=$(GNUPGHOME="$_HOME" gpg --with-colons --list-secret-keys 2>/dev/null | awk -F: '/^fpr/{print $10; exit}')
+          _KID=$(GNUPGHOME="$_HOME" gpg --list-secret-keys --keyid-format=long 2>/dev/null | grep -oE '[0-9A-F]{16}' | head -1)
+          [[ -z "$_FPR" || -z "$_KID" ]] && { echo "❌ Key generation failed"; rm -rf "$_HOME"; exit 1; }
+
+          # Select the token that passed preflight for secret writes — never derived from workflow inputs.
+          _SEC_TOK="$([[ "$TOKEN_SOURCE" == user ]] && echo "$USER_TOKEN" || echo "$APP_TOKEN")"
+
+          if [[ "$SCOPE" == "org" ]]; then
+            GNUPGHOME="$_HOME" gpg --batch --pinentry-mode loopback --passphrase "$_PASS" \
+              --armor --export-secret-keys "$_FPR" \
+              | GH_TOKEN="$_SEC_TOK" gh secret set "XB_GK" --org "$ORG" --visibility all
+            printf '%s' "$_PASS" | GH_TOKEN="$_SEC_TOK" gh secret set "XB_GP" --org "$ORG" --visibility all
+          else
+            GNUPGHOME="$_HOME" gpg --batch --pinentry-mode loopback --passphrase "$_PASS" \
+              --armor --export-secret-keys "$_FPR" \
+              | GH_TOKEN="$_SEC_TOK" gh secret set "XB_GK" --repo "$REPO"
+            printf '%s' "$_PASS" | GH_TOKEN="$_SEC_TOK" gh secret set "XB_GP" --repo "$REPO"
+          fi
+          unset _SEC_TOK
+
+          # Public key is not sensitive; write to runner temp for the next step
+          GNUPGHOME="$_HOME" gpg --armor --export "$_FPR" > "$RUNNER_TEMP/bot-pubkey.asc"
+          rm -rf "$_HOME"; unset _PASS
+
+          echo "key_id=$_KID" >> "$GITHUB_OUTPUT"
+          echo "fpr=$_FPR" >> "$GITHUB_OUTPUT"
+          echo "✅ Secrets rotated — key \`$_KID\`" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Register public key to bot account
+        if: ${{ !inputs.dry_run && steps.keygen.outputs.key_id != '' }}
+        env:
+          USER_TOKEN: ${{ secrets['XB_UT'] }}
+        run: |
+          _KID="${{ steps.keygen.outputs.key_id }}"
+          _PUB=$(cat "$RUNNER_TEMP/bot-pubkey.asc" 2>/dev/null || true)
+          rm -f "$RUNNER_TEMP/bot-pubkey.asc"
+
+          if [[ -z "$USER_TOKEN" ]]; then
+            echo "⚠️ USER_TOKEN_SECRET not set — skipping pubkey registration" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "ℹ️ Set a classic PAT (write:gpg_key scope) for the bot account to enable Verified commits"
+            exit 0
+          fi
+
+          _EXISTING=$(GH_TOKEN="$USER_TOKEN" gh api /user/gpg_keys \
+            --jq ".[] | select(.key_id == \"$_KID\") | .id" 2>/dev/null || true)
+          if [[ "$_EXISTING" =~ ^[0-9]+$ ]]; then
+            echo "✅ GPG key already registered (id: $_EXISTING)" | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            _RESULT=$(GH_TOKEN="$USER_TOKEN" gh api /user/gpg_keys \
+              --method POST -f armored_public_key="$_PUB" --jq '.id' 2>/dev/null) || _RESULT=""
+            if [[ "$_RESULT" =~ ^[0-9]+$ ]]; then
+              echo "✅ GPG public key registered to bot account (id: $_RESULT)" | tee -a "$GITHUB_STEP_SUMMARY"
+            else
+              echo "⚠️ Registration returned: $_RESULT — check USER_TOKEN_SECRET has write:gpg_key scope" | tee -a "$GITHUB_STEP_SUMMARY"
+            fi
+          fi

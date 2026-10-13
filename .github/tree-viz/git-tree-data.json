@@ -3,10 +3,197 @@
     "repository": "vidcom",
     "current_branch": "main",
     "repo_url": "https://github.com/XAOSTECH/vidcom",
-    "generated": "2026-06-01T04:27:40Z",
+    "generated": "2026-10-05T04:50:02Z",
     "max_commits": 500
   },
   "commits": [
+  {
+    "sha": "552f4f1147ec52338fd265725378bd940886b78c",
+    "short": "552f4f1",
+    "parents": "56f80b2465c04ab97625e33fda2ee8b32be8cd64",
+    "author": "xaos-bot",
+    "email": "262248812+xaos-bot@users.noreply.github.com",
+    "date": "2026-10-05T04:50:02Z",
+    "timestamp": 1791175802,
+    "subject": "chore: update git tree visualisation",
+    "refs": "HEAD -> main, origin/main"
+  },
+  {
+    "sha": "56f80b2465c04ab97625e33fda2ee8b32be8cd64",
+    "short": "56f80b2",
+    "parents": "0ad424d83a8c52e02445f6fc8caff6a7d3f3d863",
+    "author": "xaos-bot",
+    "email": "262248812+xaos-bot@users.noreply.github.com",
+    "date": "2026-09-28T04:32:03Z",
+    "timestamp": 1790569923,
+    "subject": "chore: update git tree visualisation",
+    "refs": ""
+  },
+  {
+    "sha": "0ad424d83a8c52e02445f6fc8caff6a7d3f3d863",
+    "short": "0ad424d",
+    "parents": "3ffee15db10756419bb46dfe299f280b4dd877b6",
+    "author": "xaos-bot",
+    "email": "262248812+xaos-bot@users.noreply.github.com",
+    "date": "2026-09-21T04:07:15Z",
+    "timestamp": 1789963635,
+    "subject": "chore: update git tree visualisation",
+    "refs": ""
+  },
+  {
+    "sha": "3ffee15db10756419bb46dfe299f280b4dd877b6",
+    "short": "3ffee15",
+    "parents": "d2018d67b2e648fda37b7e26cfbf914f282a9ae9",
+    "author": "xaos-bot",
+    "email": "262248812+xaos-bot@users.noreply.github.com",
+    "date": "2026-09-14T04:07:56Z",
+    "timestamp": 1789358876,
+    "subject": "chore: update git tree visualisation",
+    "refs": ""
+  },
+  {
+    "sha": "d2018d67b2e648fda37b7e26cfbf914f282a9ae9",
+    "short": "d2018d6",
+    "parents": "3113e6f8cda5969e55b37445b2bd3e74bb52bde6",
+    "author": "xaos-bot",
+    "email": "262248812+xaos-bot@users.noreply.github.com",
+    "date": "2026-09-07T03:43:42Z",
+    "timestamp": 1788752622,
+    "subject": "chore: update git tree visualisation",
+    "refs": ""
+  },
+  {
+    "sha": "3113e6f8cda5969e55b37445b2bd3e74bb52bde6",
+    "short": "3113e6f",
+    "parents": "8d76922a34151ab409270ff48e08db93a938dd98",
+    "author": "xaos-bot",
+    "email": "262248812+xaos-bot@users.noreply.github.com",
+    "date": "2026-08-17T01:26:43Z",
+    "timestamp": 1786930003,
+    "subject": "chore: update git tree visualisation",
+    "refs": ""
+  },
+  {
+    "sha": "8d76922a34151ab409270ff48e08db93a938dd98",
+    "short": "8d76922",
+    "parents": "c554e8eb672ac9d9531c9c3e1ef0a8f43f5fa7e1",
+    "author": "xaos-bot",
+    "email": "262248812+xaos-bot@users.noreply.github.com",
+    "date": "2026-08-10T02:03:47Z",
+    "timestamp": 1786327427,
+    "subject": "chore: update git tree visualisation",
+    "refs": ""
+  },
+  {
+    "sha": "c554e8eb672ac9d9531c9c3e1ef0a8f43f5fa7e1",
+    "short": "c554e8e",
+    "parents": "5681b684a9f8d433328167646127dded60019ddf",
+    "author": "xaos-bot",
+    "email": "262248812+xaos-bot@users.noreply.github.com",
+    "date": "2026-08-03T03:21:30Z",
+    "timestamp": 1785727290,
+    "subject": "chore: update git tree visualisation",
+    "refs": ""
+  },
+  {
+    "sha": "5681b684a9f8d433328167646127dded60019ddf",
+    "short": "5681b68",
+    "parents": "f9075461a8d7acc167d4f975eff77c275364e6a8",
+    "author": "xaos-bot",
+    "email": "262248812+xaos-bot@users.noreply.github.com",
+    "date": "2026-07-27T03:31:10Z",
+    "timestamp": 1785123070,
+    "subject": "chore: update git tree visualisation",
+    "refs": ""
+  },
+  {
+    "sha": "f9075461a8d7acc167d4f975eff77c275364e6a8",
+    "short": "f907546",
+    "parents": "ece533c74a8c35437e934169d6aefb43109d8638",
+    "author": "xaos-bot",
+    "email": "262248812+xaos-bot@users.noreply.github.com",
+    "date": "2026-07-20T03:31:04Z",
+    "timestamp": 1784518264,
+    "subject": "chore: update git tree visualisation",
+    "refs": ""
+  },
+  {
+    "sha": "ece533c74a8c35437e934169d6aefb43109d8638",
+    "short": "ece533c",
+    "parents": "2bbcea416ad1578ace9a990393d933578023b85e",
+    "author": "xaos-bot",
+    "email": "262248812+xaos-bot@users.noreply.github.com",
+    "date": "2026-07-13T03:23:18Z",
+    "timestamp": 1783912998,
+    "subject": "chore: update git tree visualisation",
+    "refs": ""
+  },
+  {
+    "sha": "2bbcea416ad1578ace9a990393d933578023b85e",
+    "short": "2bbcea4",
+    "parents": "5b5edc17d4a39701bb648ec5898c50b5a0470994",
+    "author": "xaos-bot",
+    "email": "262248812+xaos-bot@users.noreply.github.com",
+    "date": "2026-07-06T03:56:25Z",
+    "timestamp": 1783310185,
+    "subject": "chore: update git tree visualisation",
+    "refs": ""
+  },
+  {
+    "sha": "5b5edc17d4a39701bb648ec5898c50b5a0470994",
+    "short": "5b5edc1",
+    "parents": "e43a170406409b1421443e71870ec07aa3613687",
+    "author": "xaos-bot",
+    "email": "262248812+xaos-bot@users.noreply.github.com",
+    "date": "2026-06-29T04:18:50Z",
+    "timestamp": 1782706730,
+    "subject": "chore: update git tree visualisation",
+    "refs": ""
+  },
+  {
+    "sha": "e43a170406409b1421443e71870ec07aa3613687",
+    "short": "e43a170",
+    "parents": "66fa4113656a57fa7a76d45c4c7eafbc84322260",
+    "author": "xaos-bot",
+    "email": "262248812+xaos-bot@users.noreply.github.com",
+    "date": "2026-06-22T04:51:15Z",
+    "timestamp": 1782103875,
+    "subject": "chore: update git tree visualisation",
+    "refs": ""
+  },
+  {
+    "sha": "66fa4113656a57fa7a76d45c4c7eafbc84322260",
+    "short": "66fa411",
+    "parents": "bde66ed5e92bd4dd45c34f141599f51bc35df6d0",
+    "author": "xaos-bot",
+    "email": "262248812+xaos-bot@users.noreply.github.com",
+    "date": "2026-06-15T04:50:50Z",
+    "timestamp": 1781499050,
+    "subject": "chore: update git tree visualisation",
+    "refs": ""
+  },
+  {
+    "sha": "bde66ed5e92bd4dd45c34f141599f51bc35df6d0",
+    "short": "bde66ed",
+    "parents": "fcd8511481a4ca60795dc7de900eee10f8817461",
+    "author": "xaos-bot",
+    "email": "262248812+xaos-bot@users.noreply.github.com",
+    "date": "2026-06-08T04:23:09Z",
+    "timestamp": 1780892589,
+    "subject": "chore: update git tree visualisation",
+    "refs": ""
+  },
+  {
+    "sha": "fcd8511481a4ca60795dc7de900eee10f8817461",
+    "short": "fcd8511",
+    "parents": "29819367a73ca3668816bba3887efed79c1436c5",
+    "author": "xaos-bot",
+    "email": "262248812+xaos-bot@users.noreply.github.com",
+    "date": "2026-06-01T04:27:40Z",
+    "timestamp": 1780288060,
+    "subject": "chore: update git tree visualisation",
+    "refs": ""
+  },
   {
     "sha": "29819367a73ca3668816bba3887efed79c1436c5",
     "short": "2981936",
@@ -16,7 +203,7 @@
     "date": "2026-05-31T21:13:31+02:00",
     "timestamp": 1780254811,
     "subject": "feat: add --continue flag to control progress resume in detect-fortnite.py",
-    "refs": "HEAD -> main, origin/main"
+    "refs": ""
   },
   {
     "sha": "5a6a0ca0f6c090b8a83829fbe7f0d3bb1ebc1701",
@@ -350,7 +537,7 @@
   }
 ],
   "branches": [
-  {"name":"29819367a73ca3668816bba3887efed79c1436c5 feat: add --continue flag to control progress resume in detect-fortnite.py","sha":"*","current":false,"merged":false}
+  {"name":"552f4f1147ec52338fd265725378bd940886b78c chore: update git tree visualisation","sha":"*","current":false,"merged":false}
 ],
   "tags": [
 

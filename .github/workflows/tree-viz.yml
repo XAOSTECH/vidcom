@@ -12,8 +12,7 @@
 # ============================================================================
 #
 # Generates an interactive HTML visualisation of the repository's git tree.
-# Produces a fractal-style tree with waving leaves, showing commits, branches,
-# merges, and tags in an animated, scrollable canvas.
+# Produces a fractal-style tree with waving leaves, showing commits, branches, merges, and tags in an animated, scrollable canvas.
 #
 # TRIGGERS:
 #   - Manual dispatch (workflow_dispatch)
@@ -25,7 +24,7 @@
 #   3. Calculates organic tree layout positions
 #   4. Renders interactive HTML with Canvas animations
 #   5. Optionally renders static SVG for README embedding
-#   6. Commits generated artefacts to .github/tree-viz/
+#   6. Commits generated artefacts to .github/static/tree-viz/
 #
 # CONFIGURATION:
 #   - max_commits: Maximum number of commits to visualise (default: 500)
@@ -77,6 +76,11 @@ permissions:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+# Serialise runs on a ref so overlapping regenerations cannot race and double-commit.
+concurrency:
+  group: tree-viz-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   generate-tree:
@@ -133,7 +137,7 @@ jobs:
           cd "$GITHUB_WORKSPACE"
 
           # Build args
-          ARGS=("--max-commits" "$MAX_COMMITS" "--output-dir" ".github/tree-viz")
+          ARGS=("--max-commits" "$MAX_COMMITS" "--output-dir" ".github/static/tree-viz")
           [[ "$EMBED_README" != "true" ]] && ARGS+=("--no-embed")
 
           bash .dev-control/scripts/create-tree.sh "${ARGS[@]}"
@@ -147,7 +151,7 @@ jobs:
             exit 0
           fi
 
-          git add .github/tree-viz/
+          git add .github/static/tree-viz/
           [[ -f README.md ]] && git add README.md
           [[ -f docs/README.md ]] && git add docs/README.md
           git commit -m "chore: update git tree visualisation" \
@@ -158,9 +162,9 @@ jobs:
           echo "## 🌳 Tree Visualization Updated" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Generated files:" >> $GITHUB_STEP_SUMMARY
-          echo "- \`.github/tree-viz/git-tree.html\` (interactive)" >> $GITHUB_STEP_SUMMARY
-          echo "- \`.github/tree-viz/git-tree-data.json\` (data)" >> $GITHUB_STEP_SUMMARY
-          echo "- \`.github/tree-viz/git-tree.svg\` (static)" >> $GITHUB_STEP_SUMMARY
+          echo "- \`.github/static/tree-viz/git-tree.html\` (interactive)" >> $GITHUB_STEP_SUMMARY
+          echo "- \`.github/static/tree-viz/git-tree-data.json\` (data)" >> $GITHUB_STEP_SUMMARY
+          echo "- \`.github/static/tree-viz/git-tree.svg\` (static)" >> $GITHUB_STEP_SUMMARY
 
       - name: Cleanup dev-control checkout
         if: always()
