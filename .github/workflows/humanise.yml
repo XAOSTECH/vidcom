@@ -1,0 +1,303 @@
+# Template created by https://github.com/XAOSTECH/dev-control
+# See templates folder documentation for details.
+
+# ============================================================================
+# Comment & Prose Humanisation Workflow Template (humanise.yml)
+# ============================================================================
+#
+# ORIGIN: https://github.com/XAOSTECH/dev-control
+# This workflow template is part of the dev-control toolkit.
+# See: https://github.com/XAOSTECH/dev-control/blob/main/workflows-templates/
+#
+# ============================================================================
+#
+# Rejoins editor/AI hard-wrapped comment and prose paragraphs onto single logical lines, removing the ~70-column wrap imposed on generated text.
+# A wrapped continuation is long, ends mid-sentence (no terminal punctuation) and continues in lower case; deliberate short lines, bullets, headings, tables, code blocks, SPDX headers and shebangs are left untouched.
+# The rule set is self-contained (embedded Perl) so it works even when only the workflow is copied into a target repository.
+#
+# TRIGGERS:
+#   - Manual dispatch (workflow_dispatch)
+#   - Monthly schedule
+#
+# ============================================================================
+
+name: Humanise Comments and Prose
+
+on:
+  schedule:
+    - cron: '0 3 15 * *'
+  workflow_dispatch:
+    inputs:
+      extensions:
+        description: 'Comma-separated file extensions to scan'
+        required: false
+        type: string
+        default: 'sh,bash,zsh,md,markdown,txt,yml,yaml,py,rb,pl,toml,ts,tsx,js,jsx,go,rs,c,cc,cpp,h,hpp,java'
+      min_wrap:
+        description: 'Minimum line length treated as a hard wrap'
+        required: false
+        type: number
+        default: 48
+      dry_run:
+        description: 'Report changes without opening a pull request'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+# One humanise run per ref at a time so overlapping runs cannot race.
+concurrency:
+  group: humanise-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  humanise:
+    name: Humanise Comments and Prose
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Generate App Token
+        id: app_token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets['XB_AI'] }}
+          private-key: ${{ secrets['XB_PK'] }}
+
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ steps.app_token.outputs.token }}
+
+      - name: Humanise comments and prose
+        id: humanise
+        env:
+          EXTENSIONS: ${{ inputs.extensions || 'sh,bash,zsh,md,markdown,txt,yml,yaml,py,rb,pl,toml,ts,tsx,js,jsx,go,rs,c,cc,cpp,h,hpp,java' }}
+          HUMANISE_MIN_WRAP: ${{ inputs.min_wrap || '48' }}
+          DRY_RUN: ${{ inputs.dry_run || 'false' }}
+        run: |
+          # Embed the reflow engine so the workflow is self-contained (no dependency on repo scripts).
+          cat > /tmp/humanise.pl <<'HUMANISE_PL'
+          #!/usr/bin/env perl
+          # Reflow hard-wrapped paragraphs (comments and prose) onto single logical lines.
+          # Editors/AI wrap comment and prose text at a fixed column (~70) mid-sentence;
+          # we rejoin each wrapped paragraph. A wrapped continuation is long, ends mid-sentence (no terminal punctuation) and continues in lower case; deliberate short lines and all structure (bullets, headings, tables, code, SPDX, shebangs) are emitted verbatim.
+          use strict;
+          use warnings;
+
+          my $MIN = $ENV{HUMANISE_MIN_WRAP} // 48;
+          my $file = shift @ARGV or die "usage: humanise.pl FILE\n";
+
+          open my $in, '<', $file or die "open $file: $!\n";
+          my @l = <$in>;
+          close $in;
+          my $final_nl = (@l && $l[-1] =~ /\n\z/) ? 1 : 0;
+          chomp @l;
+
+          my $mode;
+          if ($file =~ /\.(?:md|markdown|mdown|txt|text)\z/i) { $mode = 'md'; }
+          elsif ($file =~ /\.(?:sh|bash|zsh|ya?ml|py|rb|pl|pm|toml|cfg|conf|ini|jl|mk)\z/i
+                 || $file =~ m{(?:^|/)(?:Dockerfile|Makefile)[^/]*\z}) { $mode = 'hash'; }
+          elsif ($file =~ /\.(?:ts|tsx|js|jsx|mjs|cjs|c|cc|cpp|cxx|h|hpp|hh|go|rs|java|kt|kts|swift|scala)\z/i) { $mode = 'slash'; }
+          else { exit 0; }
+
+          my $mk = $mode eq 'hash' ? '#' : $mode eq 'slash' ? '//' : '';
+
+          sub is_url  { return $_[0] =~ m{https?://|ftp://|file://}; }
+          sub is_spdx { return $_[0] =~ /SPDX-|Copyright|\(c\)\s|\x{00A9}/i; }
+          sub filled {
+              my ($s) = @_;
+              return 0 if length($s) < $MIN;
+              return 0 if $s =~ /\\\z/ || $s =~ /  \z/;
+              return 0 if is_url($s);
+              (my $t = $s) =~ s/\s+\z//;
+              return 0 if $t =~ /[.!?:;]\z/;
+              return 1;
+          }
+          sub cont_lc { return $_[0] =~ /^[a-z]/; }
+
+          sub comment_parts {
+              my ($line, $mk) = @_;
+              my $q = quotemeta $mk;
+              return () unless $line =~ /^(\s*)$q\s?(\S.*)\z/;
+              my ($ind, $txt) = ($1, $2);
+              return () if $txt =~ /^!/;
+              return () if $txt =~ /^[-=*#_~>|+]/;
+              return () if $txt =~ /^\d+[.)]\s/;
+              return () if $txt =~ /^(?:shellcheck|noqa|type:|pylint|eslint|prettier|TODO|FIXME|NOTE|HACK|XXX|@)/i;
+              return () if is_spdx($txt) || is_url($line);
+              return ($ind, $txt);
+          }
+
+          sub reflow_comments {
+              my ($lines, $mk) = @_;
+              my @out;
+              my $i = 0;
+              while ($i <= $#$lines) {
+                  my $line = $lines->[$i];
+                  my ($ind, $txt) = comment_parts($line, $mk);
+                  if (!defined $ind) { push @out, $line; $i++; next; }
+                  my @para = ($txt);
+                  my @src  = ($line);
+                  my $j = $i + 1;
+                  while ($j <= $#$lines) {
+                      my ($ind2, $txt2) = comment_parts($lines->[$j], $mk);
+                      last if !defined $ind2 || $ind2 ne $ind;
+                      push @para, $txt2;
+                      push @src, $lines->[$j];
+                      $j++;
+                  }
+                  my @merged = ({ txt => $para[0], src => $src[0], hit => 0 });
+                  for (my $k = 1; $k < @para; $k++) {
+                      if (filled($src[$k-1]) && cont_lc($para[$k])) {
+                          $merged[-1]{txt} .= ' ' . $para[$k];
+                          $merged[-1]{hit} = 1;
+                      } else {
+                          push @merged, { txt => $para[$k], src => $src[$k], hit => 0 };
+                      }
+                  }
+                  push @out, map { $_->{hit} ? "$ind$mk " . $_->{txt} : $_->{src} } @merged;
+                  $i = $j;
+              }
+              return @out;
+          }
+
+          sub structural_md {
+              my ($s) = @_;
+              return ($s =~ /^\s*\z/
+                  || $s =~ /^\s*\x60{3}/
+                  || $s =~ /^\s{0,3}#{1,6}\s/
+                  || $s =~ /^\s*[-*+]\s/
+                  || $s =~ /^\s*\d+[.)]\s/
+                  || $s =~ /^\s*>/
+                  || $s =~ /^\s*\|/
+                  || $s =~ /^\s*<[^>]/
+                  || $s =~ /^\s{4,}\S/
+                  || $s =~ /^\s*(?:[-=_*]\s*){3,}\z/);
+          }
+
+          sub reflow_md {
+              my ($lines) = @_;
+              my @out;
+              my $fence = 0;
+              my $i = 0;
+              if (@$lines && $lines->[0] =~ /^---\s*\z/) {
+                  push @out, $lines->[0]; $i = 1;
+                  while ($i <= $#$lines) { push @out, $lines->[$i]; my $done = ($lines->[$i] =~ /^---\s*\z/); $i++; last if $done; }
+              }
+              while ($i <= $#$lines) {
+                  my $line = $lines->[$i];
+                  if ($line =~ /^\s*\x60{3}/) { $fence = !$fence; push @out, $line; $i++; next; }
+                  if ($fence || structural_md($line)) { push @out, $line; $i++; next; }
+                  my @para = ($line);
+                  my $j = $i + 1;
+                  while ($j <= $#$lines && !structural_md($lines->[$j]) && $lines->[$j] !~ /^\s*\x60{3}/) {
+                      push @para, $lines->[$j];
+                      $j++;
+                  }
+                  my ($indent) = ($para[0] =~ /^(\s*)/);
+                  my @merged = ({ txt => ($para[0] =~ s/^\s+//r), src => $para[0], hit => 0 });
+                  for (my $k = 1; $k < @para; $k++) {
+                      (my $t = $para[$k]) =~ s/^\s+//;
+                      if (filled($para[$k-1]) && cont_lc($t)) {
+                          $merged[-1]{txt} .= ' ' . $t;
+                          $merged[-1]{hit} = 1;
+                      } else {
+                          push @merged, { txt => $t, src => $para[$k], hit => 0 };
+                      }
+                  }
+                  push @out, map { $_->{hit} ? $indent . $_->{txt} : $_->{src} } @merged;
+                  $i = $j;
+              }
+              return @out;
+          }
+
+          my @out = $mode eq 'md' ? reflow_md(\@l) : reflow_comments(\@l, $mk);
+          open my $o, '>', $file or die "write $file: $!\n";
+          print $o join("\n", @out);
+          print $o "\n" if $final_nl;
+          close $o;
+          HUMANISE_PL
+
+          # Candidate files: tracked, filtered by extension, excluding generated/vendor/self paths.
+          IFS=',' read -ra EXTS <<< "$EXTENSIONS"
+          FILES=()
+          while IFS= read -r f; do
+            case "$f" in
+              .git/*|node_modules/*|*/node_modules/*|vendor/*|*/vendor/*) continue ;;
+              test-repo/*|licence-templates/*|licences-templates/*|.github/static/*) continue ;;
+              LICENCE|LICENSE|*/LICENCE|*/LICENSE) continue ;;
+            esac
+            ext="${f##*.}"
+            match=0
+            for e in "${EXTS[@]}"; do
+              [[ "$ext" == "$e" ]] && { match=1; break; }
+            done
+            [[ "$match" == 1 ]] && FILES+=("$f")
+          done < <(git ls-files)
+
+          echo "Scanning ${#FILES[@]} files for hard-wrapped paragraphs..."
+          if [[ ${#FILES[@]} -gt 0 ]]; then
+            for f in "${FILES[@]}"; do
+              perl /tmp/humanise.pl "$f" || echo "skip: $f"
+            done
+          fi
+
+          echo "## Humanise" >> "$GITHUB_STEP_SUMMARY"
+          if git diff --quiet; then
+            echo "needs_fix=false" >> "$GITHUB_OUTPUT"
+            echo "No hard-wrapped comments or prose found." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          COUNT=$(git diff --name-only | wc -l)
+          echo "Reflowed hard-wrapped text in ${COUNT} file(s):" >> "$GITHUB_STEP_SUMMARY"
+          git diff --name-only | sed 's/^/- /' >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ "$DRY_RUN" == "true" ]]; then
+            git checkout -- .
+            echo "needs_fix=false" >> "$GITHUB_OUTPUT"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "_Dry run - no pull request opened._" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "needs_fix=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup bot identity
+        if: steps.humanise.outputs.needs_fix == 'true'
+        uses: XAOSTECH/dev-control/.github/actions/identity@b067f72ca7f849b734a45634f23581a739d5146f # v2.0.0
+        with:
+          gpg-private-key: ${{ secrets['XB_GK'] }}
+          gpg-passphrase: ${{ secrets['XB_GP'] }}
+          user-token: ${{ secrets['XB_UT'] }}
+          bot-name: ${{ vars.BOT_NAME || 'xaos-bot' }}
+
+      - name: Ensure automerge label exists
+        if: steps.humanise.outputs.needs_fix == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        run: |
+          gh label create automerge --description "Automatically merge this PR" --color "3BEF67" 2>/dev/null || true
+
+      - name: Create Pull Request
+        if: steps.humanise.outputs.needs_fix == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        run: |
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          BRANCH_NAME="humanise/$(date +%Y%m%d-%H%M%S)"
+          git checkout -b "$BRANCH_NAME"
+          git commit -m "chore: humanise hard-wrapped comments and prose" -m "Rejoin editor/AI hard-wrapped comment and prose paragraphs onto single logical lines; structure, bullets, code, SPDX headers and deliberate short lines are preserved."
+          git push origin "$BRANCH_NAME"
+          gh pr create --title "chore: Humanise hard-wrapped comments and prose" --body "Automated reflow of editor/AI hard-wrapped comment and prose paragraphs onto single logical lines. Bullets, headings, tables, code blocks, SPDX headers, shebangs and deliberate short lines are preserved. Please review for any unintended joins. Generated by the Humanise workflow (${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})." --base "${{ github.ref_name }}" --head "$BRANCH_NAME" --label "automerge"
+          echo "Pull request created."

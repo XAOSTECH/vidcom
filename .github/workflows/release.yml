@@ -137,8 +137,7 @@ permissions:
   actions: write
   id-token: write
 
-# One release job per tag at a time; if a second run starts (e.g. re-trigger from tag push)
-# it waits rather than racing. Both paths are idempotent so the second run is a no-op.
+# One release job per tag at a time; if a second run starts (e.g. re-trigger from tag push) it waits rather than racing. Both paths are idempotent so the second run is a no-op.
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
@@ -163,9 +162,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0  # Full history for changelog generation
-          # Use the app token so actions/checkout installs its credential helper
-          # with the app token — this carries the 'workflows' installation permission
-          # for all subsequent git pushes, including workflow file references.
+          # Use the app token so actions/checkout installs its credential helper with the app token — this carries the 'workflows' installation permission for all subsequent git pushes, including workflow file references.
           token: ${{ steps.app_token.outputs.token }}
 
       - name: Setup bot identity
@@ -190,9 +187,27 @@ jobs:
             VERSION="${{ github.event.inputs.version }}"
             VERSION="${VERSION#v}"  # strip leading 'v' if present
             if [[ -z "$VERSION" ]]; then
-              LATEST=$(gh api repos/${{ github.repository }}/releases/latest --jq '.tag_name' 2>/dev/null || \
-                       git tag --list 'v*' --sort=-version:refname | grep -vE 'latest|alpha|beta|rc' | head -1)
-              LATEST=${LATEST#v}
+              # Fetch tag name and release title in one API call for rich diagnostics.
+              _REL_JSON=$(gh api repos/${{ github.repository }}/releases/latest 2>/dev/null || echo '{}')
+              _LATEST_TAG=$(echo "$_REL_JSON" | jq -r '.tag_name // ""' 2>/dev/null || echo "")
+              _LATEST_TITLE=$(echo "$_REL_JSON" | jq -r '.name // ""' 2>/dev/null || echo "")
+              LATEST="${_LATEST_TAG#v}"
+              echo "🔍 Latest release: tag='${_LATEST_TAG:-none}' title='${_LATEST_TITLE:-none}'"
+
+              # When the tag is not semver (e.g. 'Main', 'latest'), try to extract the version from the release title before giving up.
+              if [[ ! "$LATEST" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+                echo "⚠️ Tag '${_LATEST_TAG}' is not semver — checking release title '${_LATEST_TITLE}' for version..."
+                _TITLE_VER=$(echo "$_LATEST_TITLE" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?' | head -1 || echo "")
+                if [[ -n "$_TITLE_VER" ]]; then
+                  echo "✅ Found version in release title: ${_TITLE_VER}"
+                  LATEST="$_TITLE_VER"
+                else
+                  _GIT_TAG=$(git tag --list 'v*' --sort=-version:refname | grep -vE 'latest|alpha|beta|rc' | head -1 || echo "")
+                  echo "⚠️ No semver in title — falling back to latest v* git tag: ${_GIT_TAG:-none}"
+                  LATEST="${_GIT_TAG#v}"
+                fi
+              fi
+
               if [[ "$LATEST" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
                 MAJOR=${BASH_REMATCH[1]}
                 MINOR=${BASH_REMATCH[2]}
@@ -203,10 +218,12 @@ jobs:
                   echo "📐 Normalising v${LATEST} → v${VERSION} (standard semver convention)"
                 else
                   VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
-                  echo "🔢 Auto-detected next version: ${VERSION} (from latest: v${LATEST})"
+                  echo "🔢 Auto-detected next version: ${VERSION} (resolved from tag='${_LATEST_TAG}' → '${LATEST}')"
                 fi
               else
-                echo "❌ Could not determine latest version to auto-increment"
+                echo "❌ Could not determine version to auto-increment."
+                echo "   tag='${_LATEST_TAG:-none}' title='${_LATEST_TITLE:-none}' resolved='${LATEST:-none}'"
+                echo "ℹ️ Specify the version explicitly via the workflow dispatch input."
                 exit 1
               fi
             fi
@@ -337,11 +354,26 @@ jobs:
       - name: Gather commit history
         id: commits
         if: steps.check_release.outputs.exists != 'true'
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
         run: |
           VERSION="${{ steps.version.outputs.version }}"
 
-          # Previous release tag — excludes the version being released (doesn't exist yet)
-          PREV_TAG=$(git tag -l 'v*' --sort=-version:refname | grep -v "^v${VERSION}$" | head -1 || echo "")
+          # Walk back through version tags, skipping any whose GitHub release was deleted, so commit history spans all changes since the last live release.
+          PREV_TAG=""
+          _LATEST_GIT_TAG=""
+          while IFS= read -r _tag; do
+            [[ "$_tag" == "v${VERSION}" ]] && continue
+            [[ -z "$_LATEST_GIT_TAG" ]] && _LATEST_GIT_TAG="$_tag"
+            if gh release view "$_tag" &>/dev/null 2>&1; then
+              PREV_TAG="$_tag"
+              break
+            fi
+          done < <(git tag -l 'v*' --sort=-version:refname | grep -vE 'latest|alpha|beta|rc')
+
+          if [[ -n "$_LATEST_GIT_TAG" && "$_LATEST_GIT_TAG" != "${PREV_TAG:-}" ]]; then
+            echo "⚠️ Tags exist up to $_LATEST_GIT_TAG but their releases were deleted — using ${PREV_TAG:-initial} as base so this release includes all changes." | tee -a $GITHUB_STEP_SUMMARY
+          fi
 
           if [[ -n "$PREV_TAG" ]]; then
             COMMIT_COUNT=$(git log "${PREV_TAG}..HEAD" --oneline | wc -l)
@@ -370,10 +402,19 @@ jobs:
           RERELEASE="${{ steps.check_release.outputs.rerelease }}"
           TODAY=$(date +%Y-%m-%d)
 
-          # Build grouped commit categories from .commits-subjects.txt
+          # Build grouped commit categories from .commits-subjects.txt.
+          # Skip bot housekeeping/merge noise and de-duplicate identical subjects.
           ADDED="" FIXED="" CHANGED="" DOCS=""
+          declare -A SEEN_SUBJECTS
           while IFS= read -r line; do
             [[ -z "$line" ]] && continue
+            case "$line" in
+              "chore: update CHANGELOG"*|"chore(changelog):"*) continue ;;
+              "chore: update git tree visualisation"*|"chore(tree-viz):"*) continue ;;
+              "Merge pull request"*|"Merge branch"*|"Merge remote-tracking"*) continue ;;
+            esac
+            [[ -n "${SEEN_SUBJECTS["$line"]:-}" ]] && continue
+            SEEN_SUBJECTS["$line"]=1
             msg="${line#*: }"
             case "$line" in
               feat:*|feat\(*) ADDED="${ADDED}\n- ${msg}" ;;
@@ -461,24 +502,26 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         run: |
           TAG_NAME="${{ steps.version.outputs.tag_name }}"
-          
-          # Check if tag already exists
+
+          # Delete the tag if it already exists — reaching this step means any existing tag is orphaned (its release was manually deleted) or otherwise stale, so always recreate.
           if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
-            echo "⚠️ Tag $TAG_NAME already exists, skipping tag creation"
-          else
-            # Create tag (signed if GPG available, annotated otherwise)
-            if [[ "${{ steps.import_gpg.outcome }}" == "success" ]]; then
-              git tag -s "$TAG_NAME" -m "Release $TAG_NAME"
-              echo "✅ Created signed tag: $TAG_NAME"
-            else
-              git tag -a "$TAG_NAME" -m "Release $TAG_NAME"
-              echo "ℹ️ Created unsigned tag: $TAG_NAME (add GPG_PRIVATE_KEY secret for signed tags)"
-            fi
-            
-            # Push via GITHUB_TOKEN so this doesn't re-trigger push:tags:v* (PAT pushes would)
-            git push "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" "$TAG_NAME"
-            echo "✅ Pushed tag: $TAG_NAME"
+            echo "ℹ️ Tag $TAG_NAME already exists — recreating to pin it to the current commit."
+            git tag -d "$TAG_NAME" 2>/dev/null || true
+            git push origin ":refs/tags/${TAG_NAME}" 2>/dev/null || true
           fi
+
+          # Create tag (signed if GPG available, annotated otherwise)
+          if [[ "${{ steps.import_gpg.outcome }}" == "success" ]]; then
+            git tag -s "$TAG_NAME" -m "Release $TAG_NAME"
+            echo "✅ Created signed tag: $TAG_NAME"
+          else
+            git tag -a "$TAG_NAME" -m "Release $TAG_NAME"
+            echo "ℹ️ Created unsigned tag: $TAG_NAME (add GPG_PRIVATE_KEY secret for signed tags)"
+          fi
+
+          # Push via GITHUB_TOKEN so this doesn't re-trigger push:tags:v* (PAT pushes would)
+          git push "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" "$TAG_NAME"
+          echo "✅ Pushed tag: $TAG_NAME"
 
       - name: Update package version in config
         if: steps.check_release.outputs.exists != 'true'
