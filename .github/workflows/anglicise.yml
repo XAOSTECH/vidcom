@@ -308,6 +308,9 @@ jobs:
             ! -path "./workflows-templates/anglicise.yml" \
             ! -path "./licence-templates/*" \
             ! -path "./LICENCE" \
+            ! -path "./LICENCE.md" \
+            ! -path "./LICENSE" \
+            ! -path "./LICENSE.md" \
             2>/dev/null | sort)
 
           is_workflow_file() {
@@ -417,6 +420,9 @@ jobs:
             ! -path "./workflows-templates/anglicise.yml" \
             ! -path "./licence-templates/*" \
             ! -path "./LICENCE" \
+            ! -path "./LICENCE.md" \
+            ! -path "./LICENSE" \
+            ! -path "./LICENSE.md" \
             2>/dev/null)
 
           is_workflow_file() {
