@@ -200,8 +200,15 @@ jobs:
             exit 0
           fi
           
+          # Bot housekeeping commits must not, on their own, accumulate toward a release.
+          EXCLUDE_CHORES=(--invert-grep
+            --grep='^chore: update git tree visualisation'
+            --grep='^chore(tree-viz):'
+            --grep='^chore: update CHANGELOG'
+            --grep='^chore(changelog):')
+
           # Count commits since last release (for minimum threshold)
-          COMMIT_COUNT=$(git log "${LATEST_TAG}..HEAD" --oneline | wc -l)
+          COMMIT_COUNT=$(git log "${LATEST_TAG}..HEAD" --oneline "${EXCLUDE_CHORES[@]}" | wc -l)
           
           # Cumulative count: commits since the PRIOR different version tag
           # Re-releases move the tag to HEAD, resetting the above count.
@@ -213,7 +220,7 @@ jobs:
                         [[ "$v" != "$LATEST_VERSION" ]] && echo "$t" && break
                       done) || true
           if [[ -n "$PRIOR_TAG" ]]; then
-            CUMULATIVE_COUNT=$(git log "${PRIOR_TAG}..HEAD" --oneline | wc -l)
+            CUMULATIVE_COUNT=$(git log "${PRIOR_TAG}..HEAD" --oneline "${EXCLUDE_CHORES[@]}" | wc -l)
           else
             CUMULATIVE_COUNT=$COMMIT_COUNT
           fi
@@ -279,8 +286,28 @@ jobs:
             -f normalize_version="${{ github.event.inputs.normalize_version || 'true' }}" \
             -f prerelease=false \
             -f draft=false
-          
+
           echo "✅ Release workflow triggered successfully"
+
+          _BEFORE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          _RUN_ID=""
+          for _i in 1 2 3 4 5 6; do
+            sleep 10
+            _RUN_ID=$(gh run list --workflow release.yml --limit 5 \
+              --json databaseId,createdAt \
+              --jq "[.[] | select(.createdAt >= \"$_BEFORE\") | .databaseId][0]" 2>/dev/null || true)
+            [[ -n "$_RUN_ID" && "$_RUN_ID" != "null" ]] && break
+          done
+          if [[ -n "$_RUN_ID" && "$_RUN_ID" != "null" ]]; then
+            echo "⏳ Waiting for release run $_RUN_ID..." | tee -a $GITHUB_STEP_SUMMARY
+            if gh run watch "$_RUN_ID" --exit-status 2>/dev/null; then
+              echo "✅ **release.yml completed** (run $_RUN_ID)" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "❌ **release.yml failed** (run $_RUN_ID) — check the run for details" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "⚠️ Could not locate the dispatched release run to monitor" >> $GITHUB_STEP_SUMMARY
+          fi
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "🚀 **Release workflow triggered** (${RELEASE_TYPE}: v${RELEASE_VERSION} — ${COMMIT_COUNT} new, ${CUMULATIVE_COUNT} cumulative)" >> $GITHUB_STEP_SUMMARY
 
@@ -293,8 +320,7 @@ jobs:
           echo "## 📦 Submodule Check" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
-          # For manual (workflow_dispatch) runs, override threshold to 0 so all
-          # behind submodules are flagged regardless of how far behind they are.
+          # For manual (workflow_dispatch) runs, override threshold to 0 so all behind submodules are flagged regardless of how far behind they are.
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             EFFECTIVE_THRESHOLD=0
           else
@@ -758,8 +784,28 @@ jobs:
 
           if [[ $COMMITS_SINCE -ge $TREE_VIZ_THRESHOLD ]]; then
             echo "✅ Threshold met — triggering tree-viz workflow" | tee -a $GITHUB_STEP_SUMMARY
+            _BEFORE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
             gh workflow run tree-viz.yml --ref ${{ github.ref_name }}
             echo "triggered=true" >> $GITHUB_OUTPUT
+
+            _RUN_ID=""
+            for _i in 1 2 3 4 5 6; do
+              sleep 10
+              _RUN_ID=$(gh run list --workflow tree-viz.yml --limit 5 \
+                --json databaseId,createdAt \
+                --jq "[.[] | select(.createdAt >= \"$_BEFORE\") | .databaseId][0]" 2>/dev/null || true)
+              [[ -n "$_RUN_ID" && "$_RUN_ID" != "null" ]] && break
+            done
+            if [[ -n "$_RUN_ID" && "$_RUN_ID" != "null" ]]; then
+              echo "⏳ Waiting for tree-viz run $_RUN_ID..." | tee -a $GITHUB_STEP_SUMMARY
+              if gh run watch "$_RUN_ID" --exit-status 2>/dev/null; then
+                echo "✅ **tree-viz.yml completed** (run $_RUN_ID)" >> $GITHUB_STEP_SUMMARY
+              else
+                echo "❌ **tree-viz.yml failed** (run $_RUN_ID) — check the run for details" >> $GITHUB_STEP_SUMMARY
+              fi
+            else
+              echo "⚠️ Could not locate the dispatched tree-viz run to monitor" >> $GITHUB_STEP_SUMMARY
+            fi
           else
             echo "ℹ️ Below threshold — skipping ($COMMITS_SINCE < $TREE_VIZ_THRESHOLD)" | tee -a $GITHUB_STEP_SUMMARY
             echo "triggered=false" >> $GITHUB_OUTPUT

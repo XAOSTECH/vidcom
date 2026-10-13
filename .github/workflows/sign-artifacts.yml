@@ -12,8 +12,7 @@
 # ============================================================================
 #
 # Reusable workflow for Authenticode code signing via SignPath.io.
-# Submits unsigned artefacts to SignPath, waits for completion, and
-# re-uploads the signed artefacts (replacing the originals).
+# Submits unsigned artefacts to SignPath, waits for completion, and re-uploads the signed artefacts (replacing the originals).
 #
 # SIGNING vs GPG:
 #   GPG (identity action)     — signs git commits/tags  → provenance
