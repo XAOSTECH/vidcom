@@ -82,8 +82,7 @@ clear_profile_locks() {
         return 0
     fi
     
-    # Detect container/devcontainer environment where locks are always stale
-    # after restart (no persistent Chrome process survives container rebuild)
+    # Detect container/devcontainer environment where locks are always stale after restart (no persistent Chrome process survives container rebuild)
     local in_container=false
     if [[ -f /.dockerenv ]] \
         || grep -q 'docker\|containerd' /proc/1/cgroup 2>/dev/null \

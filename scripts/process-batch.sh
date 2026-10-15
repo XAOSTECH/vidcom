@@ -140,8 +140,7 @@ detect_highlights() {
     
     log_step "Auto-detecting highlights in: $video"
     
-    # Fortnite has no icon kill-feed -> use the OCR detector (teacher) instead of
-    # the YOLO/ONNX path. It also harvests training data for the Crispy model.
+    # Fortnite has no icon kill-feed -> use the OCR detector (teacher) instead of the YOLO/ONNX path. It also harvests training data for the Crispy model.
     if [[ "${GAME,,}" == "fortnite" ]]; then
         local py="${PROJECT_DIR}/.venv/bin/python"
         [[ -x "$py" ]] || py="python3"

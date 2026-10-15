@@ -64,8 +64,7 @@ install_bc() {
 }
 
 #------------------------------------------------------------------------------
-# OCR + Python ML stack (tesseract for Fortnite kill-feed detection + venv for
-# training/converting Crispy-style models). Durable across container rebuilds.
+# OCR + Python ML stack (tesseract for Fortnite kill-feed detection + venv for training/converting Crispy-style models). Durable across container rebuilds.
 #------------------------------------------------------------------------------
 install_ocr_stack() {
     log_info "Installing OCR + Python ML stack..."
