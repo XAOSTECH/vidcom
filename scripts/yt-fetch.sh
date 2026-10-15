@@ -365,8 +365,7 @@ cmd_export_cookies() {
     echo "" >> "$COOKIES_FILE"
     
     # Extract cookies for youtube.com and google.com (for auth)
-    # Netscape format: domain, domain_initial_dot, path, secure, expires, name, value
-    # domain_initial_dot must be TRUE if domain starts with dot
+    # Netscape format: domain, domain_initial_dot, path, secure, expires, name, value domain_initial_dot must be TRUE if domain starts with dot
     sqlite3 -separator $'\t' "$tmp_db" "
         SELECT 
             host_key,

@@ -2,8 +2,7 @@
 #
 # test_highlights.sh - Test YOLO highlight detection functionality
 #
-# Tests the highlight detection module with various inputs and validates
-# output format and basic functionality.
+# Tests the highlight detection module with various inputs and validates output format and basic functionality.
 #
 
 set -e

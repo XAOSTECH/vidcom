@@ -2,8 +2,7 @@
 #
 # collect-training-data.sh - Extract frames from gaming videos for labelling
 #
-# This script extracts frames from gaming videos, organising them by game
-# and timestamp for manual labelling with tools like LabelImg or CVAT.
+# This script extracts frames from gaming videos, organising them by game and timestamp for manual labelling with tools like LabelImg or CVAT.
 #
 # Usage:
 #   ./scripts/collect-training-data.sh [options] <video_file|video_dir>

@@ -2,8 +2,7 @@
 #
 # train-highlight-model.sh - Train YOLOv11 model for gaming highlight detection
 #
-# This script trains a YOLOv11n (nano) model on labelled gaming highlight data
-# and exports it to ONNX format for use with vidcom.
+# This script trains a YOLOv11n (nano) model on labelled gaming highlight data and exports it to ONNX format for use with vidcom.
 #
 # Prerequisites:
 #   - Python 3.10+ with pip
