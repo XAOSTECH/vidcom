@@ -1,0 +1,284 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" 
+     xmlns:xlink="http://www.w3.org/1999/xlink"
+     width="9760" height="7540" 
+     viewBox="0 0 9760 7540">
+  <defs>
+    <radialGradient id="leafGradient">
+      <stop offset="0%" style="stop-color:#22c55e;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#16a34a;stop-opacity:0.8" />
+    </radialGradient>
+    <radialGradient id="mergeGradient">
+      <stop offset="0%" style="stop-color:#a78bfa;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#7c3aed;stop-opacity:0.8" />
+    </radialGradient>
+    <radialGradient id="forkGradient">
+      <stop offset="0%" style="stop-color:#fb923c;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#ea580c;stop-opacity:0.8" />
+    </radialGradient>
+    <radialGradient id="tagGradient">
+      <stop offset="0%" style="stop-color:#38bdf8;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0284c7;stop-opacity:0.8" />
+    </radialGradient>
+    <style>
+      .branch-line { stroke: #64748b; stroke-width: 2; fill: none; opacity: 0.7; }
+      .trunk-line { stroke: #22c55e; stroke-width: 2.5; fill: none; opacity: 0.6; }
+      .commit-leaf { cursor: pointer; }
+      .commit-leaf:hover { filter: brightness(1.5); }
+      .branch-label { font-family: sans-serif; font-size: 12px; font-weight: bold; fill: #0f172a; }
+    </style>
+  </defs>
+  
+  <rect width="9760" height="7540" fill="#f8fafc"/>
+  <defs>
+    <pattern id="grid" width="100" height="100" patternUnits="userSpaceOnUse">
+      <path d="M 100 0 L 0 0 0 100" fill="none" stroke="#e2e8f0" stroke-width="0.5" opacity="0.3"/>
+    </pattern>
+  </defs>
+  <rect width="9760" height="7540" fill="url(#grid)"/>
+  
+  <!-- Branch connection lines -->
+  <g id="branches">
+    <line class="trunk-line" x1="600" y1="60" x2="600" y2="260"/>
+    <path class="branch-line" d="M 600 60 C 600 76, 720 84, 720 100"/>
+    <path class="branch-line" d="M 720 100 C 720 164, 600 196, 600 260"/>
+    <path class="branch-line" d="M 480 180 C 480 292, 960 348, 960 460"/>
+    <line class="trunk-line" x1="600" y1="260" x2="600" y2="540"/>
+    <path class="branch-line" d="M 840 300 C 840 412, 240 468, 240 580"/>
+    <path class="branch-line" d="M 360 380 C 360 492, 1080 548, 1080 660"/>
+    <path class="branch-line" d="M 960 460 C 960 572, 120 628, 120 740"/>
+    <line class="trunk-line" x1="600" y1="540" x2="600" y2="820"/>
+    <path class="branch-line" d="M 240 580 C 240 692, 1200 748, 1200 860"/>
+    <path class="branch-line" d="M 1080 660 C 1080 772, 0 828, 0 940"/>
+    <path class="branch-line" d="M 120 740 C 120 852, 1320 908, 1320 1020"/>
+    <line class="trunk-line" x1="600" y1="820" x2="600" y2="1100"/>
+    <path class="branch-line" d="M 1200 860 C 1200 972, -120 1028, -120 1140"/>
+    <path class="branch-line" d="M 0 940 C 0 1052, 1440 1108, 1440 1220"/>
+    <path class="branch-line" d="M 1320 1020 C 1320 1132, -240 1188, -240 1300"/>
+    <line class="trunk-line" x1="600" y1="1100" x2="600" y2="1380"/>
+    <path class="branch-line" d="M -120 1140 C -120 1252, 1560 1308, 1560 1420"/>
+    <path class="branch-line" d="M 1440 1220 C 1440 1332, -360 1388, -360 1500"/>
+    <path class="branch-line" d="M -240 1300 C -240 1412, 1680 1468, 1680 1580"/>
+    <line class="trunk-line" x1="600" y1="1380" x2="600" y2="1660"/>
+    <path class="branch-line" d="M 1560 1420 C 1560 1532, -480 1588, -480 1700"/>
+    <path class="branch-line" d="M -360 1500 C -360 1612, 1800 1668, 1800 1780"/>
+    <path class="branch-line" d="M 1680 1580 C 1680 1692, -600 1748, -600 1860"/>
+    <line class="trunk-line" x1="600" y1="1660" x2="600" y2="1940"/>
+    <path class="branch-line" d="M -480 1700 C -480 1812, 1920 1868, 1920 1980"/>
+    <path class="branch-line" d="M 1800 1780 C 1800 1892, -720 1948, -720 2060"/>
+    <path class="branch-line" d="M -600 1860 C -600 1972, 2040 2028, 2040 2140"/>
+    <line class="trunk-line" x1="600" y1="1940" x2="600" y2="2220"/>
+    <path class="branch-line" d="M 1920 1980 C 1920 2092, -840 2148, -840 2260"/>
+    <path class="branch-line" d="M -720 2060 C -720 2172, 2160 2228, 2160 2340"/>
+    <path class="branch-line" d="M 2040 2140 C 2040 2252, -960 2308, -960 2420"/>
+    <line class="trunk-line" x1="600" y1="2220" x2="600" y2="2500"/>
+    <path class="branch-line" d="M -840 2260 C -840 2372, 2280 2428, 2280 2540"/>
+    <path class="branch-line" d="M 2160 2340 C 2160 2452, -1080 2508, -1080 2620"/>
+    <path class="branch-line" d="M -960 2420 C -960 2532, 2400 2588, 2400 2700"/>
+    <line class="trunk-line" x1="600" y1="2500" x2="600" y2="2780"/>
+    <path class="branch-line" d="M 2280 2540 C 2280 2652, -1200 2708, -1200 2820"/>
+    <path class="branch-line" d="M -1080 2620 C -1080 2732, 2520 2788, 2520 2900"/>
+    <path class="branch-line" d="M 2400 2700 C 2400 2812, -1320 2868, -1320 2980"/>
+    <line class="trunk-line" x1="600" y1="2780" x2="600" y2="3060"/>
+    <path class="branch-line" d="M -1200 2820 C -1200 2932, 2640 2988, 2640 3100"/>
+    <path class="branch-line" d="M 2520 2900 C 2520 3012, -1440 3068, -1440 3180"/>
+    <path class="branch-line" d="M -1320 2980 C -1320 3092, 2760 3148, 2760 3260"/>
+    <line class="trunk-line" x1="600" y1="3060" x2="600" y2="3340"/>
+    <path class="branch-line" d="M 2640 3100 C 2640 3212, -1560 3268, -1560 3380"/>
+    <path class="branch-line" d="M -1440 3180 C -1440 3292, 2880 3348, 2880 3460"/>
+    <path class="branch-line" d="M 2760 3260 C 2760 3372, -1680 3428, -1680 3540"/>
+    <line class="trunk-line" x1="600" y1="3340" x2="600" y2="3700"/>
+    <path class="branch-line" d="M -1560 3380 C -1560 3524, -1800 3596, -1800 3740"/>
+    <path class="branch-line" d="M 2880 3460 C 2880 3604, 3120 3676, 3120 3820"/>
+    <path class="branch-line" d="M -1680 3540 C -1680 3572, 3000 3588, 3000 3620"/>
+    <path class="branch-line" d="M 3000 3620 C 3000 3732, -1920 3788, -1920 3900"/>
+    <line class="trunk-line" x1="600" y1="3700" x2="600" y2="3980"/>
+    <path class="branch-line" d="M -1800 3740 C -1800 3852, 3240 3908, 3240 4020"/>
+    <path class="branch-line" d="M 3120 3820 C 3120 3932, -2040 3988, -2040 4100"/>
+    <path class="branch-line" d="M -1920 3900 C -1920 4012, 3360 4068, 3360 4180"/>
+    <line class="trunk-line" x1="600" y1="3980" x2="600" y2="4260"/>
+    <path class="branch-line" d="M 3240 4020 C 3240 4132, -2160 4188, -2160 4300"/>
+    <path class="branch-line" d="M -2040 4100 C -2040 4212, 3480 4268, 3480 4380"/>
+    <path class="branch-line" d="M 3360 4180 C 3360 4340, 3600 4420, 3600 4580"/>
+    <path class="branch-line" d="M 3360 4180 C 3360 4292, -2280 4348, -2280 4460"/>
+    <line class="trunk-line" x1="600" y1="4260" x2="600" y2="4540"/>
+    <path class="branch-line" d="M -2160 4300 C -2160 4444, -2400 4516, -2400 4660"/>
+    <path class="branch-line" d="M 3480 4380 C 3480 4524, 3720 4596, 3720 4740"/>
+    <path class="branch-line" d="M -2280 4460 C -2280 4508, 3600 4532, 3600 4580"/>
+    <line class="trunk-line" x1="600" y1="4540" x2="600" y2="4900"/>
+    <path class="branch-line" d="M 3600 4580 C 3600 4724, 3840 4796, 3840 4940"/>
+    <path class="branch-line" d="M -2400 4660 C -2400 4804, -2640 4876, -2640 5020"/>
+    <path class="branch-line" d="M 3720 4740 C 3720 4884, 3960 4956, 3960 5100"/>
+    <path class="branch-line" d="M -2520 4820 C -2520 4868, 3840 4892, 3840 4940"/>
+    <line class="trunk-line" x1="600" y1="4900" x2="600" y2="5180"/>
+    <path class="branch-line" d="M 3840 4940 C 3840 5052, -2760 5108, -2760 5220"/>
+    <path class="branch-line" d="M -2640 5020 C -2640 5132, 4080 5188, 4080 5300"/>
+    <path class="branch-line" d="M 3960 5100 C 3960 5212, -2880 5268, -2880 5380"/>
+    <line class="trunk-line" x1="600" y1="5180" x2="600" y2="5460"/>
+    <path class="branch-line" d="M -2760 5220 C -2760 5332, 4200 5388, 4200 5500"/>
+    <path class="branch-line" d="M 4080 5300 C 4080 5412, -3000 5468, -3000 5580"/>
+    <path class="branch-line" d="M -2880 5380 C -2880 5492, 4320 5548, 4320 5660"/>
+    <line class="trunk-line" x1="600" y1="5460" x2="600" y2="5740"/>
+    <path class="branch-line" d="M 4200 5500 C 4200 5612, -3120 5668, -3120 5780"/>
+    <path class="branch-line" d="M -3000 5580 C -3000 5692, 4440 5748, 4440 5860"/>
+    <path class="branch-line" d="M 4320 5660 C 4320 5772, -3240 5828, -3240 5940"/>
+    <line class="trunk-line" x1="600" y1="5740" x2="600" y2="6020"/>
+    <path class="branch-line" d="M -3120 5780 C -3120 5892, 4560 5948, 4560 6060"/>
+    <path class="branch-line" d="M 4440 5860 C 4440 5972, -3360 6028, -3360 6140"/>
+    <path class="branch-line" d="M -3240 5940 C -3240 6020, -3360 6060, -3360 6140"/>
+    <line class="trunk-line" x1="600" y1="6020" x2="600" y2="6220"/>
+    <path class="branch-line" d="M 4560 6060 C 4560 6140, 4680 6180, 4680 6260"/>
+    <path class="branch-line" d="M -3360 6140 C -3360 6220, -3480 6260, -3480 6340"/>
+    <line class="trunk-line" x1="600" y1="6220" x2="600" y2="6420"/>
+    <path class="branch-line" d="M 4680 6260 C 4680 6340, 4800 6380, 4800 6460"/>
+    <path class="branch-line" d="M -3480 6340 C -3480 6420, -3600 6460, -3600 6540"/>
+    <line class="trunk-line" x1="600" y1="6420" x2="600" y2="6620"/>
+    <path class="branch-line" d="M 4800 6460 C 4800 6540, 4920 6580, 4920 6660"/>
+    <path class="branch-line" d="M -3600 6540 C -3600 6620, -3720 6660, -3720 6740"/>
+    <line class="trunk-line" x1="600" y1="6620" x2="600" y2="6820"/>
+    <path class="branch-line" d="M 4920 6660 C 4920 6740, 5040 6780, 5040 6860"/>
+    <path class="branch-line" d="M -3720 6740 C -3720 6820, -3840 6860, -3840 6940"/>
+    <line class="trunk-line" x1="600" y1="6820" x2="600" y2="7020"/>
+    <path class="branch-line" d="M 5040 6860 C 5040 6940, 5160 6980, 5160 7060"/>
+    <path class="branch-line" d="M -3840 6940 C -3840 7020, -3960 7060, -3960 7140"/>
+    <line class="trunk-line" x1="600" y1="7020" x2="600" y2="7220"/>
+    <path class="branch-line" d="M 5160 7060 C 5160 7140, 5280 7180, 5280 7260"/>
+    <path class="branch-line" d="M -3960 7140 C -3960 7220, -4080 7260, -4080 7340"/>
+    <line class="trunk-line" x1="600" y1="7220" x2="600" y2="7420"/>
+    <path class="branch-line" d="M 5280 7260 C 5280 7324, 600 7356, 600 7420"/>
+    <path class="branch-line" d="M -4080 7340 C -4080 7372, 600 7388, 600 7420"/>
+  </g>
+  <!-- Commit nodes -->
+  <g id="commits">
+    <circle class="commit-leaf" cx="600" cy="60" r="10" fill="url(#mergeGradient)" stroke="#7c3aed" stroke-width="1.5"><title>f0cc6bc: Merge pull request #4 from XAOSTECH:humanise/20261015-075405</title></circle>
+    <circle class="commit-leaf" cx="720" cy="100" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>2d5f763: chore: humanise hard-wrapped comments and prose</title></circle>
+    <circle class="commit-leaf" cx="480" cy="180" r="6" fill="url(#tagGradient)" stroke="#0284c7" stroke-width="1.5"><title>63a7829: chore(dc-init): update workflows,actions</title></circle>
+    <circle class="commit-leaf" cx="600" cy="260" r="9" fill="url(#forkGradient)" stroke="#ea580c" stroke-width="1.5"><title>0b8da4f: chore(dc-init): update workflows,actions</title></circle>
+    <circle class="commit-leaf" cx="840" cy="300" r="6" fill="url(#tagGradient)" stroke="#0284c7" stroke-width="1.5"><title>99ee4c8: chore(dc-init): update workflows,actions</title></circle>
+    <circle class="commit-leaf" cx="360" cy="380" r="6" fill="url(#tagGradient)" stroke="#0284c7" stroke-width="1.5"><title>7ebc06c: chore(dc-init): update workflows,actions</title></circle>
+    <circle class="commit-leaf" cx="960" cy="460" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>107c80c: chore: update git tree visualisation</title></circle>
+    <circle class="commit-leaf" cx="600" cy="540" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>4144d79: chore: update git tree visualisation</title></circle>
+    <circle class="commit-leaf" cx="240" cy="580" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>ff89809: chore: update git tree visualisation</title></circle>
+    <circle class="commit-leaf" cx="1080" cy="660" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>31f06ac: chore: update git tree visualisation</title></circle>
+    <circle class="commit-leaf" cx="120" cy="740" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>1ae71ee: feat: add --continue flag to control progress resume in detect-fortnite.py</title></circle>
+    <circle class="commit-leaf" cx="600" cy="820" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>cdf9fbc: feat: add --continue flag to control progress resume in detect-fortnite.py</title></circle>
+    <circle class="commit-leaf" cx="1200" cy="860" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>2315d2a: feat: add --continue flag to control progress resume in detect-fortnite.py</title></circle>
+    <circle class="commit-leaf" cx="0" cy="940" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>c4fec06: feat: add --continue flag to control progress resume in detect-fortnite.py</title></circle>
+    <circle class="commit-leaf" cx="1320" cy="1020" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>ce753ea: feat: add automatic progress saving and resume to detect-fortnite.py for long video support</title></circle>
+    <circle class="commit-leaf" cx="600" cy="1100" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>657984a: feat: add automatic progress saving and resume to detect-fortnite.py for long video support</title></circle>
+    <circle class="commit-leaf" cx="-120" cy="1140" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>e27d1fa: feat: add automatic progress saving and resume to detect-fortnite.py for long video support</title></circle>
+    <circle class="commit-leaf" cx="1440" cy="1220" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>e8d0a01: feat: add automatic progress saving and resume to detect-fortnite.py for long video support</title></circle>
+    <circle class="commit-leaf" cx="-240" cy="1300" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>d58d676: Fortnite OCR: only count highlights when kill counter increments (true kill detection)</title></circle>
+    <circle class="commit-leaf" cx="600" cy="1380" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>42e160c: Fortnite OCR: only count highlights when kill counter increments (true kill detection)</title></circle>
+    <circle class="commit-leaf" cx="1560" cy="1420" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>417822f: Fortnite OCR: only count highlights when kill counter increments (true kill detection)</title></circle>
+    <circle class="commit-leaf" cx="-360" cy="1500" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>8d08455: Fortnite OCR: only count highlights when kill counter increments (true kill detection)</title></circle>
+    <circle class="commit-leaf" cx="1680" cy="1580" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>2f3f6bb: Fortnite OCR: reduce polling to every 3 seconds (0.33fps) for efficient kill counter detection</title></circle>
+    <circle class="commit-leaf" cx="600" cy="1660" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>a58de35: Fortnite OCR: reduce polling to every 3 seconds (0.33fps) for efficient kill counter detection</title></circle>
+    <circle class="commit-leaf" cx="-480" cy="1700" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>16fdb92: Fortnite OCR: reduce polling to every 3 seconds (0.33fps) for efficient kill counter detection</title></circle>
+    <circle class="commit-leaf" cx="1800" cy="1780" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>6d7c518: Fortnite OCR: reduce polling to every 3 seconds (0.33fps) for efficient kill counter detection</title></circle>
+    <circle class="commit-leaf" cx="-600" cy="1860" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>aac7b27: Fortnite kill counter: add confirmed region and robust extraction script with image enhancement for OCR reliability</title></circle>
+    <circle class="commit-leaf" cx="600" cy="1940" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>799a8f3: Fortnite kill counter: add confirmed region and robust extraction script with image enhancement for OCR reliability</title></circle>
+    <circle class="commit-leaf" cx="1920" cy="1980" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>8cbaee7: Fortnite kill counter: add confirmed region and robust extraction script with image enhancement for OCR reliability</title></circle>
+    <circle class="commit-leaf" cx="-720" cy="2060" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>d5bb336: Fortnite kill counter: add confirmed region and robust extraction script with image enhancement for OCR reliability</title></circle>
+    <circle class="commit-leaf" cx="2040" cy="2140" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>f96fab9: Pipeline: OCR stack install, player filter, and Fortnite OCR integration; training script updates</title></circle>
+    <circle class="commit-leaf" cx="600" cy="2220" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>beb6a15: Pipeline: OCR stack install, player filter, and Fortnite OCR integration; training script updates</title></circle>
+    <circle class="commit-leaf" cx="-840" cy="2260" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>2e160cf: Pipeline: OCR stack install, player filter, and Fortnite OCR integration; training script updates</title></circle>
+    <circle class="commit-leaf" cx="2160" cy="2340" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>972b09f: Pipeline: OCR stack install, player filter, and Fortnite OCR integration; training script updates</title></circle>
+    <circle class="commit-leaf" cx="-960" cy="2420" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>0034ae6: Fix incompatible pointer type in OrtValue Run call for GCC 15</title></circle>
+    <circle class="commit-leaf" cx="600" cy="2500" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>68d9b26: Fix incompatible pointer type in OrtValue Run call for GCC 15</title></circle>
+    <circle class="commit-leaf" cx="2280" cy="2540" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>3fbaad8: Fix incompatible pointer type in OrtValue Run call for GCC 15</title></circle>
+    <circle class="commit-leaf" cx="-1080" cy="2620" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>4693561: Fix incompatible pointer type in OrtValue Run call for GCC 15</title></circle>
+    <circle class="commit-leaf" cx="2400" cy="2700" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>a100ea9: chore: update actions + workflows</title></circle>
+    <circle class="commit-leaf" cx="600" cy="2780" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>dd279f5: chore: update actions + workflows</title></circle>
+    <circle class="commit-leaf" cx="-1200" cy="2820" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>7e9fa5b: chore: update actions + workflows</title></circle>
+    <circle class="commit-leaf" cx="2520" cy="2900" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>3637af6: chore: update actions + workflows</title></circle>
+    <circle class="commit-leaf" cx="-1320" cy="2980" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>5e35211: Merge pull request #3 from XAOSTECH:anglicise/20260401-021254</title></circle>
+    <circle class="commit-leaf" cx="600" cy="3060" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>34527d4: Merge pull request #3 from XAOSTECH:anglicise/20260401-021254</title></circle>
+    <circle class="commit-leaf" cx="2640" cy="3100" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>b2b8d6e: Merge pull request #3 from XAOSTECH:anglicise/20260401-021254</title></circle>
+    <circle class="commit-leaf" cx="-1440" cy="3180" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>f9675df: Merge pull request #3 from XAOSTECH:anglicise/20260401-021254</title></circle>
+    <circle class="commit-leaf" cx="2760" cy="3260" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>a61c486: chore: convert American spellings to British English</title></circle>
+    <circle class="commit-leaf" cx="600" cy="3340" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>f404684: chore: convert American spellings to British English</title></circle>
+    <circle class="commit-leaf" cx="-1560" cy="3380" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>dde74d2: chore: convert American spellings to British English</title></circle>
+    <circle class="commit-leaf" cx="2880" cy="3460" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>c38349f: chore: convert American spellings to British English</title></circle>
+    <circle class="commit-leaf" cx="-1680" cy="3540" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>0905523: chore: update git tree visualisation</title></circle>
+    <g class="commit-leaf"><rect x="2991" y="3611" width="18" height="18" rx="3" transform="rotate(45 3000 3620)" fill="#475569" stroke="#cbd5e1" stroke-width="1.5"/><text x="3000" y="3624" text-anchor="middle" font-family="sans-serif" font-size="11" font-weight="bold" fill="#f8fafc">3</text><title>3 commits</title></g>
+    <circle class="commit-leaf" cx="600" cy="3700" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>1fac2d2: chore(dc-init): load workflows,actions</title></circle>
+    <circle class="commit-leaf" cx="-1800" cy="3740" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>2028a1d: chore(dc-init): load workflows,actions</title></circle>
+    <circle class="commit-leaf" cx="3120" cy="3820" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>75adca5: chore(dc-init): load workflows,actions</title></circle>
+    <circle class="commit-leaf" cx="-1920" cy="3900" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>8663a88: chore(dc-init): update workflows and actions</title></circle>
+    <circle class="commit-leaf" cx="600" cy="3980" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>0a39e47: chore(dc-init): update workflows and actions</title></circle>
+    <circle class="commit-leaf" cx="3240" cy="4020" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>2236b4e: chore(dc-init): update workflows and actions</title></circle>
+    <circle class="commit-leaf" cx="-2040" cy="4100" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>3eb2e7b: chore(dc-init): update workflows and actions</title></circle>
+    <circle class="commit-leaf" cx="3360" cy="4180" r="10" fill="url(#mergeGradient)" stroke="#7c3aed" stroke-width="1.5"><title>d8b8368: Merge pull request #2 from XAOSTECH:anglicise/20260301-020200\n\nchore: Convert American spellings to British English</title></circle>
+    <circle class="commit-leaf" cx="600" cy="4260" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>04b7fbb: Merge pull request #2 from XAOSTECH:anglicise/20260301-020200\n\nchore: Convert American spellings to British English</title></circle>
+    <circle class="commit-leaf" cx="-2160" cy="4300" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>1de2e7c: Merge pull request #2 from XAOSTECH:anglicise/20260301-020200\n\nchore: Convert American spellings to British English</title></circle>
+    <circle class="commit-leaf" cx="3480" cy="4380" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>e4679f9: Merge pull request #2 from XAOSTECH:anglicise/20260301-020200\n\nchore: Convert American spellings to British English</title></circle>
+    <circle class="commit-leaf" cx="-2280" cy="4460" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>55810b3: chore: convert American spellings to British English</title></circle>
+    <circle class="commit-leaf" cx="600" cy="4540" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>fadb0fa: dc-init</title></circle>
+    <circle class="commit-leaf" cx="3600" cy="4580" r="9" fill="url(#forkGradient)" stroke="#ea580c" stroke-width="1.5"><title>30ebb8f: dc-init</title></circle>
+    <circle class="commit-leaf" cx="-2400" cy="4660" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>d6645b3: dc-init</title></circle>
+    <circle class="commit-leaf" cx="3720" cy="4740" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>8c390c9: dc-init</title></circle>
+    <circle class="commit-leaf" cx="-2520" cy="4820" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>6eec922: chore: convert American spellings to British English</title></circle>
+    <circle class="commit-leaf" cx="600" cy="4900" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>69ba08e: chore:refactor container</title></circle>
+    <circle class="commit-leaf" cx="3840" cy="4940" r="9" fill="url(#forkGradient)" stroke="#ea580c" stroke-width="1.5"><title>60a8fb0: chore:refactor container</title></circle>
+    <circle class="commit-leaf" cx="-2640" cy="5020" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>e2d30a4: chore:refactor container</title></circle>
+    <circle class="commit-leaf" cx="3960" cy="5100" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>0e08154: chore:refactor container</title></circle>
+    <circle class="commit-leaf" cx="600" cy="5180" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>389d92e: fix(devcontainer): recreate examples + add minimal configs</title></circle>
+    <circle class="commit-leaf" cx="-2760" cy="5220" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>5771e20: fix(devcontainer): recreate examples + add minimal configs</title></circle>
+    <circle class="commit-leaf" cx="4080" cy="5300" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>aee1852: fix(devcontainer): recreate examples + add minimal configs</title></circle>
+    <circle class="commit-leaf" cx="-2880" cy="5380" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>0b32c4e: fix(devcontainer): recreate examples + add minimal configs</title></circle>
+    <circle class="commit-leaf" cx="600" cy="5460" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>f4a120e: fix(devcontainer): fix perm &amp;&amp; pip installation</title></circle>
+    <circle class="commit-leaf" cx="4200" cy="5500" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>db63b5d: fix(devcontainer): fix perm &amp;&amp; pip installation</title></circle>
+    <circle class="commit-leaf" cx="-3000" cy="5580" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>4e54373: fix(devcontainer): fix perm &amp;&amp; pip installation</title></circle>
+    <circle class="commit-leaf" cx="4320" cy="5660" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>679cc1d: fix(devcontainer): fix perm &amp;&amp; pip installation</title></circle>
+    <circle class="commit-leaf" cx="600" cy="5740" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>ed6889d: chore(devcontainer cleanup)</title></circle>
+    <circle class="commit-leaf" cx="-3120" cy="5780" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>180cdc8: chore(devcontainer cleanup)</title></circle>
+    <circle class="commit-leaf" cx="4440" cy="5860" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>83c1bb6: chore(devcontainer cleanup)</title></circle>
+    <circle class="commit-leaf" cx="-3240" cy="5940" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>751b6d1: chore(devcontainer cleanup)</title></circle>
+    <circle class="commit-leaf" cx="600" cy="6020" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>11a4b8b: feat: add dynamic nvm, YOLOv8n ONNX, and example configs</title></circle>
+    <circle class="commit-leaf" cx="4560" cy="6060" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>cccf6a0: feat: add dynamic nvm, YOLOv8n ONNX, and example configs</title></circle>
+    <circle class="commit-leaf" cx="-3360" cy="6140" r="9" fill="url(#forkGradient)" stroke="#ea580c" stroke-width="1.5"><title>35ee519: feat: add dynamic nvm, YOLOv8n ONNX, and example configs</title></circle>
+    <circle class="commit-leaf" cx="600" cy="6220" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>60686de: feat: add yt-dlp, sqlite3, cookie handling for video downloads</title></circle>
+    <circle class="commit-leaf" cx="4680" cy="6260" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>cf13e27: feat: add yt-dlp, sqlite3, cookie handling for video downloads</title></circle>
+    <circle class="commit-leaf" cx="-3480" cy="6340" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>b446348: feat: add yt-dlp, sqlite3, cookie handling for video downloads</title></circle>
+    <circle class="commit-leaf" cx="600" cy="6420" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>0931dfa: feat: Add YOLO-based gaming highlight detection</title></circle>
+    <circle class="commit-leaf" cx="4800" cy="6460" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>acd8047: feat: Add YOLO-based gaming highlight detection</title></circle>
+    <circle class="commit-leaf" cx="-3600" cy="6540" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>48efd7b: feat: Add YOLO-based gaming highlight detection</title></circle>
+    <circle class="commit-leaf" cx="600" cy="6620" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>50cff9b: chore(cleanup)</title></circle>
+    <circle class="commit-leaf" cx="4920" cy="6660" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>137be8b: chore(cleanup)</title></circle>
+    <circle class="commit-leaf" cx="-3720" cy="6740" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>29b9d2f: chore(cleanup)</title></circle>
+    <circle class="commit-leaf" cx="600" cy="6820" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>6e834db: feat(v0.3): YouTube fetch + processed tracking + ResNet50 model</title></circle>
+    <circle class="commit-leaf" cx="5040" cy="6860" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>3b971b7: feat(v0.3): YouTube fetch + processed tracking + ResNet50 model</title></circle>
+    <circle class="commit-leaf" cx="-3840" cy="6940" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>8ca3870: feat(v0.3): YouTube fetch + processed tracking + ResNet50 model</title></circle>
+    <circle class="commit-leaf" cx="600" cy="7020" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>f0ca141: feat(chromium): container-optimized config with privacy hardening</title></circle>
+    <circle class="commit-leaf" cx="5160" cy="7060" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>3467eae: feat(chromium): container-optimized config with privacy hardening</title></circle>
+    <circle class="commit-leaf" cx="-3960" cy="7140" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>e8f930d: feat(chromium): container-optimized config with privacy hardening</title></circle>
+    <circle class="commit-leaf" cx="600" cy="7220" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>2876663: fix(chromium): detect symlink locks and improve container detection</title></circle>
+    <circle class="commit-leaf" cx="5280" cy="7260" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>f5cced5: fix(chromium): detect symlink locks and improve container detection</title></circle>
+    <circle class="commit-leaf" cx="-4080" cy="7340" r="6" fill="url(#leafGradient)" stroke="#16a34a" stroke-width="1.5"><title>cf2020f: fix(chromium): detect symlink locks and improve container detection</title></circle>
+    <circle class="commit-leaf" cx="600" cy="7420" r="9" fill="url(#forkGradient)" stroke="#ea580c" stroke-width="1.5"><title>60fd3d3: feat(v0.2): complete VIDCOM pipeline implementation</title></circle>
+  </g>
+  
+  <!-- Legend -->
+  <g id="legend" transform="translate(20, 20)">
+    <rect width="200" height="110" fill="white" stroke="#cbd5e1" stroke-width="1" rx="4"/>
+    <circle cx="20" cy="25" r="5" fill="url(#leafGradient)" stroke="#16a34a"/>
+    <text x="32" y="30" class="branch-label" font-size="12">Regular Commit</text>
+    <circle cx="20" cy="50" r="6" fill="url(#mergeGradient)" stroke="#7c3aed"/>
+    <text x="32" y="55" class="branch-label" font-size="12">Merge Commit</text>
+    <circle cx="20" cy="75" r="6" fill="url(#forkGradient)" stroke="#ea580c"/>
+    <text x="32" y="80" class="branch-label" font-size="12">Fork Point</text>
+    <circle cx="20" cy="100" r="6" fill="url(#tagGradient)" stroke="#0284c7"/>
+    <text x="32" y="105" class="branch-label" font-size="12">Tagged</text>
+  </g>
+  
+  <!-- Repository info -->
+  <g id="info" transform="translate(20, 7500)">
+    <text x="0" y="0" class="branch-label" font-size="12" fill="#666">
+      Repository: vidcom
+    </text>
+    <text x="0" y="20" class="branch-label" font-size="10" fill="#999">
+      Generated: 2026-10-15 07:54:41 UTC
+    </text>
+  </g>
+</svg>

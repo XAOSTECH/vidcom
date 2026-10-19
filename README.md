@@ -320,8 +320,8 @@ Distributed under the GPL-3.0 License. See [`LICENSE`](LICENSE) for more informa
 
 <!-- TREE-VIZ-START -->
 
-![Git Tree Visualisation](.github/tree-viz/git-tree-mini.svg)
+![Git Tree Visualisation](.github/static/tree-viz/git-tree-mini.svg)
 
-[Full SVG](.github/tree-viz/git-tree.svg) · [Interactive version](.github/tree-viz/git-tree.html) · [View data](.github/tree-viz/git-tree-data.json)
+[Full SVG](.github/static/tree-viz/git-tree.svg) · [Interactive version](.github/static/tree-viz/git-tree.html) · [View data](.github/static/tree-viz/git-tree-data.json)
 
 <!-- TREE-VIZ-END -->
