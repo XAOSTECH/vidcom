@@ -23,7 +23,7 @@
 #   - workflow_call only (called from release.yml or other workflows)
 #
 # CONTRACT:
-#   Caller must upload an artefact via actions/upload-artifact@v4 before
+#   Caller must upload an artefact via actions/upload-artifact@v7 before
 #   invoking this workflow. The artefact is downloaded, sent to SignPath,
 #   and re-uploaded with the same name (overwriting the unsigned version).
 #
@@ -141,7 +141,7 @@ jobs:
 
       - name: Download unsigned artefact
         if: steps.preflight.outputs.skip != 'true'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ${{ inputs.artifact_name }}
           path: unsigned/
@@ -163,7 +163,7 @@ jobs:
 
       - name: Re-upload signed artefact
         if: steps.preflight.outputs.skip != 'true' && steps.sign.outcome == 'success'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ inputs.artifact_name }}
           path: signed/

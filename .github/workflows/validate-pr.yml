@@ -89,7 +89,7 @@ jobs:
 
       - name: Upload validation artifact
         if: steps.check.outputs.should_merge == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pr-validation-${{ steps.check.outputs.pr_number }}
           path: pr-validation/

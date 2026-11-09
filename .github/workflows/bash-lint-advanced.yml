@@ -111,6 +111,14 @@ jobs:
           
           cat /tmp/lint/suggestions.md
 
+      - name: Upload lint results
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: lint-results
+          path: /tmp/lint/
+          retention-days: 7
+
       - name: Suggest fixes on PR
         if: github.event_name == 'pull_request' && (steps.shellcheck.outputs.errors > 0 || steps.shellcheck.outputs.warnings > 0)
         uses: actions/github-script@v8
@@ -174,9 +182,9 @@ jobs:
 
       - name: Generate security app token
         id: app_token
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@v3
         with:
-          app-id: ${{ secrets['XSS_AI'] }}
+          client-id: ${{ secrets['XSS_CI'] }}
           private-key: ${{ secrets['XSS_PK'] }}
 
       - name: Setup bot identity for signing
@@ -254,6 +262,13 @@ jobs:
     if: always()
     
     steps:
+      - name: Download lint results
+        uses: actions/download-artifact@v8
+        with:
+          name: lint-results
+          path: /tmp/lint/
+        continue-on-error: true
+
       - name: Create summary
         run: |
           ERRORS="${{ needs.shellcheck-analysis.outputs.errors }}"
@@ -262,6 +277,12 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Errors**: ${ERRORS:-0}" >> $GITHUB_STEP_SUMMARY
           echo "**Warnings**: ${WARNINGS:-0}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [[ -f /tmp/lint/suggestions.md ]]; then
+            cat /tmp/lint/suggestions.md >> $GITHUB_STEP_SUMMARY
+          fi
+
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Next Steps:" >> $GITHUB_STEP_SUMMARY
           echo "1. Review issues in workflow annotations" >> $GITHUB_STEP_SUMMARY

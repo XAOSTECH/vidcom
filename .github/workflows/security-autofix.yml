@@ -35,9 +35,9 @@ jobs:
 
       - name: Generate security app token
         id: app_token
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@v3
         with:
-          app-id: ${{ secrets.XSS_AI }}
+          client-id: ${{ secrets.XSS_CI }}
           private-key: ${{ secrets.XSS_PK }}
           permission-actions: read
           permission-security-events: read

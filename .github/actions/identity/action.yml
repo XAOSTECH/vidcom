@@ -40,6 +40,12 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Configure git defaults
+      shell: bash
+      run: |
+        git config --global init.defaultBranch main
+        git config --global advice.detachedHead false
+
     - name: Register GPG key to bot GitHub profile
       shell: bash
       env:

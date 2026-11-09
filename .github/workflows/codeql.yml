@@ -1,23 +1,28 @@
 # Template created by https://github.com/XAOSTECH/dev-control
 # See templates folder documentation for details.
 
-name: CodeQL Advanced Security
+name: CodeQL
 
 on:
+  push:
+    branches:
+      - main
+      - master
   pull_request:
     branches:
       - main
       - master
       - develop
   schedule:
-    # Run daily at 2 AM UTC (avoids rate limits on high-commit days)
-    - cron: '0 2 * * *'
+    # Mon/Wed/Fri at 02:00 UTC — frequent enough for dashboard freshness, not every day
+    - cron: '0 2 * * 1,3,5'
   workflow_dispatch:
 
 permissions:
   contents: read
   security-events: write
   actions: read
+  packages: read
 
 concurrency:
   group: codeql-${{ github.ref }}
@@ -27,65 +32,114 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  analyze:
-    name: CodeQL Analysis
+  detect:
+    name: Detect languages
     runs-on: ubuntu-latest
-    
+    outputs:
+      matrix: ${{ steps.detect.outputs.matrix }}
+      languages: ${{ steps.detect.outputs.languages }}
+      has-languages: ${{ steps.detect.outputs.has-languages }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
 
-      - name: Initialise CodeQL
+      - name: Detect CodeQL languages from repository contents
+        id: detect
+        shell: bash
+        run: |
+          set -euo pipefail
+          files="$(git ls-files)"
+          langs=()
+          want() { grep -qiE "$1" <<<"$files"; }
+          # Map repository contents to the CodeQL languages worth analysing.
+          if want '(^|/)\.github/workflows/.*\.ya?ml$';                              then langs+=(actions); fi
+          if want '\.(js|jsx|mjs|cjs|ts|tsx)$';                                      then langs+=(javascript-typescript); fi
+          if want '\.py$|(^|/)(requirements\.txt|pyproject\.toml|setup\.py|Pipfile)$'; then langs+=(python); fi
+          if want '\.rb$|(^|/)(Gemfile|.+\.gemspec)$';                               then langs+=(ruby); fi
+          if want '\.(java|kt|kts)$';                                                then langs+=(java-kotlin); fi
+          if want '\.cs$|\.(csproj|sln)$';                                           then langs+=(csharp); fi
+          if want '\.(c|cc|cpp|cxx|h|hh|hpp|hxx)$';                                  then langs+=(c-cpp); fi
+          if want '\.go$|(^|/)go\.mod$';                                             then langs+=(go); fi
+          if want '\.rs$|(^|/)Cargo\.toml$';                                         then langs+=(rust); fi
+          if want '\.swift$|(^|/)Package\.swift$';                                   then langs+=(swift); fi
+
+          # build-mode none needs no build toolchain (actions, js/ts, python, ruby, java-kotlin, csharp, rust); compiled languages (c-cpp, go, swift) use autobuild, and swift additionally requires a macOS runner.
+          json='['; sep=''
+          for l in ${langs[@]+"${langs[@]}"}; do
+            case "$l" in c-cpp|go|swift) mode=autobuild ;; *) mode=none ;; esac
+            case "$l" in swift) runner=macos-latest ;; *) runner=ubuntu-latest ;; esac
+            json+="${sep}{\"language\":\"${l}\",\"build-mode\":\"${mode}\",\"runner\":\"${runner}\"}"
+            sep=','
+          done
+          json+=']'
+
+          {
+            echo "matrix=${json}"
+            echo "languages=${langs[*]:-none}"
+            if [[ ${#langs[@]} -gt 0 ]]; then echo "has-languages=true"; else echo "has-languages=false"; fi
+          } >> "$GITHUB_OUTPUT"
+          echo "Detected CodeQL languages: \`${langs[*]:-none}\`" >> "$GITHUB_STEP_SUMMARY"
+
+  analyse:
+    name: Analyse (${{ matrix.language }})
+    needs: detect
+    if: needs.detect.outputs.has-languages == 'true'
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.detect.outputs.matrix) }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Initialise CodeQL (${{ matrix.language }} / ${{ matrix.build-mode }})
         uses: github/codeql-action/init@v4
         with:
-          # Auto-detect languages present in repo (no hardcoding)
-          # Supports: JavaScript, Python, Go, Java, C/C++, C#, Ruby, Swift
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          # security-and-quality is the most thorough suite (security-extended + maintainability).
           queries: security-and-quality
           config: |
             paths-ignore:
               - node_modules
               - vendor
-              - '.git'
-              - 'vendor/bundle'
-              - '.venv'
-              - '__pycache__'
+              - vendor/bundle
+              - .git
+              - .venv
+              - __pycache__
+              - dist
+              - build
+
+      - name: Autobuild
+        if: matrix.build-mode == 'autobuild'
+        uses: github/codeql-action/autobuild@v4
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4
         with:
-          # Upload results after analysis completes
+          category: ${{ matrix.language }}
           upload: true
 
-  # Security summary and reporting
-  security-summary:
+  summary:
     name: Security Report
     runs-on: ubuntu-latest
-    needs: [analyze]
+    needs: [detect, analyse]
     if: always()
-    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-
       - name: Generate security summary
         run: |
-          echo "## 🔒 CodeQL Security Analysis Complete" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "### Analysis Coverage:" >> "$GITHUB_STEP_SUMMARY"
-          echo "- **Auto-detected languages**: JavaScript, Python, Go, Java, C++, C#, Ruby, Swift" >> "$GITHUB_STEP_SUMMARY"
-          echo "- **Query suite**: Extended (security-and-quality)" >> "$GITHUB_STEP_SUMMARY"
-          echo "- **Schedule**: Push, PR, daily at 2 AM UTC" >> "$GITHUB_STEP_SUMMARY"
-          echo "- **Concurrency**: Cancels older scans on new push" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "### Complementary Security:" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Shell scripts: bash-lint-advanced workflow (ShellCheck)" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Dockerfile: GitHub Advanced Security scanning" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "### Next Steps:" >> "$GITHUB_STEP_SUMMARY"
-          echo "1. Check the [Security tab](../../security/code-scanning?tab=alert) for results" >> "$GITHUB_STEP_SUMMARY"
-          echo "2. Review any alerts in detail" >> "$GITHUB_STEP_SUMMARY"
-          echo "3. Address discovered vulnerabilities" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "[View CodeQL Documentation](https://codeql.github.com/docs/)" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "## 🔒 CodeQL Security Analysis"
+            echo ""
+            echo "- **Detected languages**: \`${{ needs.detect.outputs.languages }}\`"
+            echo "- **Query suite**: security-and-quality (advanced security + maintainability)"
+            echo "- **Build modes**: none for interpreted/actions, autobuild for compiled"
+            echo "- **Triggers**: pushes and PRs to the default branch, Mon/Wed/Fri 02:00 UTC, manual dispatch"
+            echo "- **Analysis result**: ${{ needs.analyse.result }}"
+            echo ""
+            echo "The \`actions\` pack scans the workflows themselves; ShellCheck (bash-lint-advanced) covers shell scripts CodeQL cannot."
+            echo ""
+            echo "Review findings in the [code-scanning alerts](../../security/code-scanning)."
+          } >> "$GITHUB_STEP_SUMMARY"

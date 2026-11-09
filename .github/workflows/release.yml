@@ -153,9 +153,9 @@ jobs:
     steps:
       - name: Generate App Token
         id: app_token
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@v3
         with:
-          app-id: ${{ secrets['XB_AI'] }}
+          client-id: ${{ secrets['XB_CI'] }}
           private-key: ${{ secrets['XB_PK'] }}
 
       - name: Checkout repository
@@ -681,9 +681,10 @@ jobs:
         if: steps.build_workflows.outputs.has_builds == 'true' && steps.check_release.outputs.exists != 'true'
         env:
           GH_TOKEN: ${{ steps.app_token.outputs.token }}
+          RUN_IDS: ${{ steps.build_workflows.outputs.run_ids }}
         run: |
           FAILED=0
-          for RUN_ID in ${{ steps.build_workflows.outputs.run_ids }}; do
+          for RUN_ID in $RUN_IDS; do
             echo "⏳ Waiting for run ${RUN_ID}..."
             if gh run watch "$RUN_ID" --exit-status; then
               echo "✅ Run ${RUN_ID} completed successfully"
@@ -699,26 +700,82 @@ jobs:
           fi
 
       - name: Download build artifacts
-        if: steps.build_workflows.outputs.has_builds == 'true' && steps.check_release.outputs.exists != 'true'
+        if: github.event_name == 'push' && steps.build_workflows.outputs.has_builds == 'true' && steps.check_release.outputs.exists != 'true'
         env:
           GH_TOKEN: ${{ steps.app_token.outputs.token }}
+          RUN_IDS: ${{ steps.build_workflows.outputs.run_ids }}
         run: |
+          set -euo pipefail
           mkdir -p dist
           STAGING=$(mktemp -d)
 
-          for RUN_ID in ${{ steps.build_workflows.outputs.run_ids }}; do
-            echo "📥 Downloading artifacts from run ${RUN_ID}..."
+          for RUN_ID in $RUN_IDS; do
+                        echo "📥 Inspecting run ${RUN_ID} before download..."
+
+            RUN_REPO=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" --jq '.repository.full_name' 2>/dev/null || echo "")
+            RUN_HEAD_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" --jq '.head_sha' 2>/dev/null || echo "")
+            RUN_STATUS=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" --jq '.status' 2>/dev/null || echo "")
+            RUN_CONCLUSION=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" --jq '.conclusion' 2>/dev/null || echo "")
+
+            if [[ "$RUN_REPO" != "$GITHUB_REPOSITORY" ]]; then
+              echo "⚠️ Skipping run ${RUN_ID}: repository mismatch (${RUN_REPO})"
+              continue
+            fi
+            if [[ "$RUN_HEAD_SHA" != "$GITHUB_SHA" ]]; then
+              echo "⚠️ Skipping run ${RUN_ID}: head_sha mismatch (${RUN_HEAD_SHA})"
+              continue
+            fi
+            if [[ "$RUN_STATUS" != "completed" || "$RUN_CONCLUSION" != "success" ]]; then
+              echo "⚠️ Skipping run ${RUN_ID}: run not successful (${RUN_STATUS}/${RUN_CONCLUSION})"
+              continue
+            fi
+
+            echo "📥 Downloading artifacts from trusted run ${RUN_ID}..."
             gh run download "$RUN_ID" --dir "$STAGING" 2>/dev/null || {
               echo "⚠️ No downloadable artifacts from run ${RUN_ID}"
               continue
             }
           done
 
-          # Flatten artifact directories into dist/
+          # Treat downloaded artifacts as untrusted:
+          # - only allow safe basenames
+          # - only copy expected artifact file types
+          # - validate SHA256SUMS.txt line format before using it
+          : > dist/SHA256SUMS.txt
           find "$STAGING" -type f | while IFS= read -r f; do
             BASENAME=$(basename "$f")
-            cp "$f" "dist/${BASENAME}"
-            echo "  → dist/${BASENAME}"
+
+            # Reject suspicious names
+            if [[ "$BASENAME" == *"/"* || "$BASENAME" == *"\\"* || "$BASENAME" == *".."* ]]; then
+              echo "⚠️ Skipping suspicious artifact name: $BASENAME"
+              continue
+            fi
+            if [[ ! "$BASENAME" =~ ^[A-Za-z0-9._+-]+$ ]]; then
+              echo "⚠️ Skipping artifact with unsupported characters: $BASENAME"
+              continue
+            fi
+
+            case "$BASENAME" in
+              SHA256SUMS.txt)
+                while IFS= read -r line; do
+                  line="${line//$'\r'/}"
+                  [[ -z "$line" ]] && continue
+                  if [[ "$line" =~ ^[a-fA-F0-9]{64}[[:space:]]+[*]?[A-Za-z0-9._+-]+$ ]]; then
+                    echo "$line" >> dist/SHA256SUMS.txt
+                  else
+                    echo "⚠️ Ignoring invalid checksum line in $f: $line"
+                  fi
+                done < "$f"
+                echo "  → merged validated checksums into dist/SHA256SUMS.txt"
+                ;;
+              *.tar.gz|*.zip|*.tgz|*.exe|*.msi|*.deb|*.rpm|*.pkg)
+                cp "$f" "dist/${BASENAME}"
+                echo "  → dist/${BASENAME}"
+                ;;
+              *)
+                echo "⚠️ Skipping unexpected artifact file: $BASENAME"
+                ;;
+            esac
           done
 
           rm -rf "$STAGING"
@@ -942,7 +999,7 @@ jobs:
 
       - name: Generate release notes
         id: release_notes
-        if: steps.check_release.outputs.exists != 'true'
+        if: github.event_name == 'push' && steps.check_release.outputs.exists != 'true'
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           TAG_NAME="${{ steps.version.outputs.tag_name }}"
@@ -977,6 +1034,8 @@ jobs:
           ### Quick Install (tarball)
           \`\`\`bash
           curl -fsSL https://github.com/$GITHUB_REPOSITORY/releases/download/${TAG_NAME}/${tarball_name} | tar xz
+          cd ${tarball_name%.tar.gz}
+          chmod +x install.sh && sudo ./install.sh
           \`\`\`
           
           ## Checksums
@@ -1013,6 +1072,8 @@ jobs:
           ### Download Release Archive
           \`\`\`bash
           curl -fsSL https://github.com/$GITHUB_REPOSITORY/archive/refs/tags/${TAG_NAME}.tar.gz | tar xz
+          cd $(basename $GITHUB_REPOSITORY)-${TAG_NAME#v}
+          chmod +x install.sh && sudo ./install.sh
           \`\`\`
           EOF
           fi
@@ -1027,8 +1088,12 @@ jobs:
             while IFS= read -r line; do
               line="${line//$'\r'/}"
               [[ -z "$line" ]] && continue
-              HASH=$(echo "$line" | awk '{print $1}')
-              FILE=$(echo "$line" | sed 's/^[a-fA-F0-9]*[ *]*//')
+              if [[ "$line" =~ ^([a-fA-F0-9]{64})[[:space:]]+[*]?([A-Za-z0-9._+-]+)$ ]]; then
+                HASH="${BASH_REMATCH[1]}"
+                FILE="${BASH_REMATCH[2]}"
+              else
+                continue
+              fi
               [[ -z "$FILE" || "$FILE" == "SHA256SUMS.txt" ]] && continue
               echo "| ${FILE} | \`${HASH}\` |" >> "$NOTES_FILE"
             done < dist/SHA256SUMS.txt
@@ -1073,10 +1138,10 @@ jobs:
         if: steps.check_release.outputs.exists != 'true'
         env:
           GH_TOKEN: ${{ steps.app_token.outputs.token }}
+          NOTES_FILE: ${{ steps.release_notes.outputs.notes_file }}
         run: |
           TAG_NAME="${{ steps.version.outputs.tag_name }}"
           VERSION="${{ steps.version.outputs.version }}"
-          NOTES_FILE="${{ steps.release_notes.outputs.notes_file }}"
           
           # Build file list (may be empty if no tarb alls)
           FILES=$(find dist/ -maxdepth 1 -type f ! -name "SHA256SUMS.txt" 2>/dev/null | tr '\n' ' ' || echo "")
