@@ -1,0 +1,209 @@
+# Template created by https://github.com/XAOSTECH/dev-control
+# See templates folder documentation for details.
+
+name: Auto-Remediate
+
+# Tie all security and lint workflows together: collect findings, apply
+# deterministic patches (ShellCheck diff-patch, known CodeQL patterns), use
+# GitHub Models to generate suggestions for harder alerts, then open a signed
+# PR via the bot. The PR carries the `automerge` label so the automerge
+# workflow can merge it without manual review when tests pass.
+
+on:
+  workflow_run:
+    workflows: ["CodeQL", "Bash Linting with Auto-Fix Suggestions"]
+    types: [completed]
+    branches: [main, master]
+  schedule:
+    # Tuesday 04:00 UTC — after Monday's Dependabot PRs have landed.
+    - cron: '0 4 * * 2'
+  workflow_dispatch:
+    inputs:
+      severity:
+        description: 'Minimum alert severity to include (error/warning/note)'
+        type: choice
+        options: [error, warning, note]
+        default: note
+      dry_run:
+        description: 'Preview changes without opening a PR'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  security-events: read
+
+concurrency:
+  group: auto-remediate-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  remediate:
+    name: Collect findings and apply fixes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      security-events: read
+      issues: write
+
+    steps:
+      - name: Generate app token
+        id: app_token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets['XB_CI'] }}
+          private-key: ${{ secrets['XB_PK'] }}
+
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ steps.app_token.outputs.token }}
+
+      - name: Setup bot identity
+        id: identity
+        uses: XAOSTECH/dev-control/.github/actions/identity@b067f72ca7f849b734a45634f23581a739d5146f # v2.0.0
+        with:
+          gpg-private-key: ${{ secrets['XB_GK'] }}
+          gpg-passphrase: ${{ secrets['XB_GP'] }}
+          user-token: ${{ secrets['XB_UT'] }}
+          bot-name: ${{ vars.BOT_NAME || 'xaos-bot' }}
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck jq
+
+      - name: Apply ShellCheck diff-patches
+        id: shellcheck
+        run: |
+          TOTAL=0; PATCHED=0
+          while IFS= read -r script; do
+            [[ -z "$script" ]] && continue
+            issues=$(shellcheck -f json "$script" 2>/dev/null | jq 'length' || echo 0)
+            TOTAL=$((TOTAL + issues))
+            diff=$(shellcheck -f diff "$script" 2>/dev/null || true)
+            if [[ -n "$diff" ]]; then
+              echo "$diff" | patch -p1 -s 2>/dev/null && PATCHED=$((PATCHED + 1)) || true
+            fi
+          done < <(find . -type f -name "*.sh" ! -path "./.git/*" ! -path "./node_modules/*" ! -path "./vendor/*")
+          echo "total=$TOTAL" >> "$GITHUB_OUTPUT"
+          echo "patched=$PATCHED" >> "$GITHUB_OUTPUT"
+          echo "ShellCheck: $TOTAL issue(s) across repo; $PATCHED file(s) patched"
+
+      - name: Collect code-scanning alerts
+        id: alerts
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        run: |
+          MIN="${{ github.event.inputs.severity || 'note' }}"
+          case "$MIN" in
+            error)   FILTER='select(.rule.severity=="error")' ;;
+            warning) FILTER='select(.rule.severity=="error" or .rule.severity=="warning")' ;;
+            *)       FILTER='.' ;;
+          esac
+          gh api "repos/${{ github.repository }}/code-scanning/alerts?state=open&per_page=100" \
+            --jq "[.[] | $FILTER | {
+              number:.number, rule:.rule.id, severity:.rule.severity,
+              file:.most_recent_instance.location.path,
+              line:.most_recent_instance.location.start_line,
+              message:.most_recent_instance.message.text
+            }]" > /tmp/alerts.json 2>/dev/null || echo '[]' > /tmp/alerts.json
+          COUNT=$(jq 'length' /tmp/alerts.json)
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+          echo "Code-scanning: $COUNT open alert(s)"
+
+      - name: Apply pattern-based CodeQL fixes
+        id: codeql_fixes
+        run: |
+          FIXED=0
+          while IFS= read -r alert; do
+            RULE=$(echo "$alert" | jq -r '.rule')
+            FILE=$(echo "$alert" | jq -r '.file')
+            [[ ! -f "$FILE" ]] && continue
+            case "$RULE" in
+              actions/unquoted-env*|actions/insecure-commands*)
+                sed -i \
+                  -e 's|>> \$GITHUB_OUTPUT|>> "$GITHUB_OUTPUT"|g' \
+                  -e 's|>> \$GITHUB_ENV|>> "$GITHUB_ENV"|g' \
+                  -e 's|>> \$GITHUB_STEP_SUMMARY|>> "$GITHUB_STEP_SUMMARY"|g' \
+                  "$FILE" && FIXED=$((FIXED + 1)) || true
+                ;;
+            esac
+          done < <(jq -c '.[]' /tmp/alerts.json 2>/dev/null || true)
+          echo "fixed=$FIXED" >> "$GITHUB_OUTPUT"
+          echo "CodeQL pattern fixes: $FIXED applied"
+
+      - name: Build alert summary and AI suggestions
+        id: summary
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ALERT_LIST=$(jq -r '.[] | "- [\(.severity | ascii_upcase)] `\(.rule)` — `\(.file):\(.line)` — \(.message)"' \
+            /tmp/alerts.json 2>/dev/null | head -20 || true)
+          echo "alert_list<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$ALERT_LIST" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+          if [[ -n "$ALERT_LIST" && "${{ steps.alerts.outputs.count }}" -gt 0 ]]; then
+            PROMPT="GitHub Actions security expert. For each alert below, give ONE concise fix (max 15 words). Keep the list format. Alerts: $ALERT_LIST"
+            AI_RESP=$(curl -fsSL -X POST \
+              -H "Authorization: Bearer $GITHUB_TOKEN" \
+              -H "Content-Type: application/json" \
+              "https://models.inference.ai.azure.com/chat/completions" \
+              -d "$(jq -n --arg p "$PROMPT" '{model:"gpt-4o-mini",messages:[{role:"user",content:$p}],max_tokens:400,temperature:0.1}')" \
+              2>/dev/null | jq -r '.choices[0].message.content // "No suggestions available."' || echo "GitHub Models unavailable.")
+            echo "ai_hints<<EOF" >> "$GITHUB_OUTPUT"
+            echo "$AI_RESP" >> "$GITHUB_OUTPUT"
+            echo "EOF" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check for changes
+        id: changes
+        run: |
+          git diff --quiet && echo "has_changes=false" >> "$GITHUB_OUTPUT" || echo "has_changes=true" >> "$GITHUB_OUTPUT"
+
+      - name: Open signed fix PR
+        if: steps.changes.outputs.has_changes == 'true' && github.event.inputs.dry_run != 'true'
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        run: |
+          BRANCH="fix/auto-remediate-$(date -u +%Y%m%d-%H%M%S)"
+          git checkout -b "$BRANCH"
+          git add -A
+          git commit -S -m "fix(security): apply automated ShellCheck and CodeQL remediation"
+          git push origin "$BRANCH"
+          printf 'Changes\nShellCheck: %s files patched (%s issues)\nCodeQL: %s fixes\nAlerts: %s\n%s\nAI hints:\n%s\n%s/security/code-scanning\n' \
+            "${{ steps.shellcheck.outputs.patched }}" \
+            "${{ steps.shellcheck.outputs.total }}" \
+            "${{ steps.codeql_fixes.outputs.fixed }}" \
+            "${{ steps.alerts.outputs.count }}" \
+            "${{ steps.summary.outputs.alert_list }}" \
+            "${{ steps.summary.outputs.ai_hints }}" \
+            "https://github.com/${{ github.repository }}" > /tmp/pr_body.md
+          gh pr create \
+            --repo "${{ github.repository }}" \
+            --base main \
+            --head "$BRANCH" \
+            --title "Auto-Remediation: Security and Lint Fixes" \
+            --body-file /tmp/pr_body.md \
+            --label "security,automated,automerge"
+
+      - name: Open tracking issue when nothing could be patched
+        if: steps.changes.outputs.has_changes == 'false' && steps.alerts.outputs.count > 0
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        run: |
+          OPEN=$(gh issue list --state open --label security-review --json number --jq 'length' 2>/dev/null || echo 0)
+          [[ "$OPEN" -gt 0 ]] && { echo "Security review issue already open"; exit 0; }
+          printf 'Open alerts requiring manual review\n\n%s\n\nAI hints:\n%s\n\nhttps://github.com/%s/security/code-scanning\n' \
+            "${{ steps.summary.outputs.alert_list }}" \
+            "${{ steps.summary.outputs.ai_hints }}" \
+            "${{ github.repository }}" > /tmp/issue_body.md
+          gh issue create \
+            --title "Security Alerts Require Manual Review" \
+            --label "security-review,help-wanted" \
+            --body-file /tmp/issue_body.md

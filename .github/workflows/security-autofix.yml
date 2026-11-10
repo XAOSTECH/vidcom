@@ -6,7 +6,7 @@ name: Security Auto-Fix Bot
 on:
   # Trigger on CodeQL scan completion
   workflow_run:
-    workflows: ["CodeQL Advanced Security"]
+    workflows: ["CodeQL"]
     types:
       - completed
   

@@ -7,6 +7,7 @@
 </p>
 
 
+
 <p align="center">
   <a href="https://github.com/xaoscience/vidcom/actions">
     <img alt="CI Status" src="https://github.com/xaoscience/vidcom/actions/workflows/bash-lint.yml/badge.svg?branch=Main>
