@@ -140,7 +140,7 @@ METADATA=$(jq -n \
 log_info "Title: $TITLE"
 log_info "Category: $CATEGORY_ID"
 log_info "Privacy: $PRIVACY"
-log_info "File: $VIDEO_FILE ($(numfmt --to=iec $FILE_SIZE))"
+log_info "File: $VIDEO_FILE ($(numfmt --to=iec "$FILE_SIZE"))"
 
 #------------------------------------------------------------------------------
 # Phase 1: Initialise resumable upload

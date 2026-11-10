@@ -184,7 +184,7 @@ train_model() {
     log_info "Running: $TRAIN_CMD"
     echo
     
-    eval $TRAIN_CMD
+    eval "$TRAIN_CMD"
     
     log_info "Training complete!"
 }
@@ -219,7 +219,7 @@ export_model() {
     EXPORT_CMD+=" half=False"  # Keep FP32 for wider compatibility
     
     log_info "Running: $EXPORT_CMD"
-    eval $EXPORT_CMD
+    eval "$EXPORT_CMD"
     
     # Find and copy ONNX file
     EXPORTED_ONNX="${BEST_PT%.pt}.onnx"
