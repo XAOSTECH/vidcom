@@ -6,18 +6,6 @@
   <a href="https://github.com/XAOSTECH/vidcom/blob/main/LICENCE"><img alt="Licence" src="https://img.shields.io/badge/licence-GPL--3.0-green?style=for-the-badge"></a>
 </p>
 
-<!-- Project Shields/Badges -->
-<p align="center">
-  <a href="https://github.com/xaoscience/vidcom">
-    <img alt="GitHub repo" src="https://img.shields.io/badge/GitHub-xaoscience%2F-vidcom-181717?style=for-the-badge&logo=github">
-  </a>
-  <a href="https://github.com/xaoscience/vidcom/releases">
-    <img alt="GitHub release" src="https://img.shields.io/github/v/release/xaoscience/vidcom?style=for-the-badge&logo=semantic-release&color=blue">
-  </a>
-  <a href="https://github.com/xaoscience/vidcom/blob/main/LICENSE">
-    <img alt="License" src="https://img.shields.io/github/license/xaoscience/vidcom?style=for-the-badge&color=green">
-  </a>
-</p>
 
 <p align="center">
   <a href="https://github.com/xaoscience/vidcom/actions">
@@ -44,7 +32,6 @@
   <img alt="Contributors" src="https://img.shields.io/github/contributors/xaoscience/vidcom?style=flat-square&logo=github&color=green">
 </p>
 
-<!-- Optional: Stability/Maturity Badge -->
 <p align="center">
   <img alt="Stability" src="https://img.shields.io/badge/stability-beta-yellow?style=flat-square">
   <img alt="Maintenance" src="https://img.shields.io/maintenance/yes/2026?style=flat-square">
