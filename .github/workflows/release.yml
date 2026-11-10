@@ -221,10 +221,9 @@ jobs:
                   echo "🔢 Auto-detected next version: ${VERSION} (resolved from tag='${_LATEST_TAG}' → '${LATEST}')"
                 fi
               else
-                echo "❌ Could not determine version to auto-increment."
-                echo "   tag='${_LATEST_TAG:-none}' title='${_LATEST_TITLE:-none}' resolved='${LATEST:-none}'"
-                echo "ℹ️ Specify the version explicitly via the workflow dispatch input."
-                exit 1
+                # No prior releases or parseable git tags — bootstrap at v0.1.0.
+                VERSION="0.1.0"
+                echo "🌱 No prior releases found — starting at v${VERSION}"
               fi
             fi
             TAG_NAME="v${VERSION}"
