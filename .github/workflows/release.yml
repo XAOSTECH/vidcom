@@ -98,7 +98,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version (leave blank to autoincrement, use current to rerelease)'
+        description: 'Version — leave blank to autoincrement; use current to rerelease; also the target version when fix_release is checked'
         required: false
         type: string
       prerelease:
@@ -131,6 +131,11 @@ on:
         required: false
         type: boolean
         default: false
+      fix_release:
+        description: 'Backfill notes for an existing release — no tag/asset changes (safe on past releases)'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -149,7 +154,8 @@ env:
 jobs:
   release:
     runs-on: ubuntu-latest
-    
+    if: github.event.inputs.fix_release != 'true'
+
     steps:
       - name: Generate App Token
         id: app_token
@@ -159,7 +165,7 @@ jobs:
           private-key: ${{ secrets['XB_PK'] }}
 
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0  # Full history for changelog generation
           # Use the app token so actions/checkout installs its credential helper with the app token — this carries the 'workflows' installation permission for all subsequent git pushes, including workflow file references.
@@ -185,7 +191,10 @@ jobs:
           else
             # Manual dispatch - use input or auto-detect next patch
             VERSION="${{ github.event.inputs.version }}"
-            VERSION="${VERSION#v}"  # strip leading 'v' if present
+            # Sanitise typos: trim spaces, replace commas with dots, strip repeated 'v' prefix.
+            VERSION="${VERSION// /}"
+            VERSION="${VERSION//,/.}"
+            VERSION="${VERSION#v}"; VERSION="${VERSION#v}"
             if [[ -z "$VERSION" ]]; then
               # Fetch tag name and release title in one API call for rich diagnostics.
               _REL_JSON=$(gh api repos/${{ github.repository }}/releases/latest 2>/dev/null || echo '{}')
@@ -389,7 +398,7 @@ jobs:
             echo "📊 Initial release"
             COMMIT_COUNT=$(git log --oneline | wc -l)
             echo "📊 Total commits: ${COMMIT_COUNT}"
-            git log --pretty=format:"%s" -20 > .commits-subjects.txt
+            git log --pretty=format:"%s" > .commits-subjects.txt
           fi
 
           echo "prev_tag=${PREV_TAG}" >> $GITHUB_OUTPUT
@@ -414,6 +423,7 @@ jobs:
             esac
             [[ -n "${SEEN_SUBJECTS["$line"]:-}" ]] && continue
             SEEN_SUBJECTS["$line"]=1
+            line="${line//</\<}"; line="${line//>/\>}"
             msg="${line#*: }"
             case "$line" in
               feat:*|feat\(*) ADDED="${ADDED}\n- ${msg}" ;;
@@ -426,15 +436,13 @@ jobs:
           # Determine heading and insertion mode
           if [[ "$RERELEASE" == "true" ]]; then
             ENTRY_LINE=$(grep -n "^## \[${VERSION}\]\|^## ${VERSION}" CHANGELOG.md 2>/dev/null | head -1 | cut -d: -f1)
-            ENTRY_DATE=$(sed -n "${ENTRY_LINE}p" CHANGELOG.md 2>/dev/null | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}' | head -1)
-            if [[ -n "$ENTRY_LINE" && "$ENTRY_DATE" == "$TODAY" ]]; then
-              HEADING="## [${VERSION}] - ${TODAY} (re-release)"
+            HEADING="## [${VERSION}] - ${TODAY} (re-release)"
+            if [[ -n "$ENTRY_LINE" ]]; then
               MODE="overwrite"
-              echo "♻️ Same-day re-release: overwriting CHANGELOG section for v${VERSION}"
+              echo "♻️ Re-release: overwriting CHANGELOG section for v${VERSION}"
             else
-              HEADING="## [${VERSION}] - ${TODAY} (re-release)"
               MODE="prepend"
-              echo "🔄 Re-release on new day: prepending CHANGELOG section for v${VERSION}"
+              echo "🔄 Re-release: no existing section found — prepending"
             fi
           else
             # Normal release: skip if version already documented
@@ -684,6 +692,8 @@ jobs:
         run: |
           FAILED=0
           for RUN_ID in $RUN_IDS; do
+            # Guard against injected non-numeric run ID values.
+            [[ "$RUN_ID" =~ ^[0-9]+$ ]] || { echo "::warning::Skipping non-numeric run ID: $RUN_ID"; continue; }
             echo "⏳ Waiting for run ${RUN_ID}..."
             if gh run watch "$RUN_ID" --exit-status; then
               echo "✅ Run ${RUN_ID} completed successfully"
@@ -703,13 +713,19 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app_token.outputs.token }}
           RUN_IDS: ${{ steps.build_workflows.outputs.run_ids }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           set -euo pipefail
+          if [[ "${EVENT_NAME}" != "push" ]]; then
+            echo "Skipping artifact download for non-push event: ${EVENT_NAME}"
+            exit 0
+          fi
           mkdir -p dist
           STAGING=$(mktemp -d)
 
           for RUN_ID in $RUN_IDS; do
-                        echo "📥 Inspecting run ${RUN_ID} before download..."
+            # Guard against injected non-numeric run ID values.
+            [[ "$RUN_ID" =~ ^[0-9]+$ ]] || { echo "::warning::Skipping non-numeric run ID: $RUN_ID"; continue; }
 
             RUN_REPO=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" --jq '.repository.full_name' 2>/dev/null || echo "")
             RUN_HEAD_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" --jq '.head_sha' 2>/dev/null || echo "")
@@ -998,13 +1014,19 @@ jobs:
 
       - name: Generate release notes
         id: release_notes
-        if: github.event_name == 'push' && steps.check_release.outputs.exists != 'true'
+        if: steps.check_release.outputs.exists != 'true'
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           TAG_NAME="${{ steps.version.outputs.tag_name }}"
           
           # Previous version tag — sourced from 'Gather commit history' step
           PREV_TAG="${{ steps.commits.outputs.prev_tag }}"
+
+          # Artifact content only on push: 'Download build artifacts' is push-gated, so dist/ never exists on dispatch.
+          ALLOW_ARTIFACT_CONTENT="false"
+          if [[ "${EVENT_NAME}" == "push" && "${{ steps.build_workflows.outputs.has_builds }}" == "true" && "${{ steps.check_release.outputs.exists }}" != "true" ]]; then
+            ALLOW_ARTIFACT_CONTENT="true"
+          fi
 
           # Generate release notes
           NOTES_FILE=$(mktemp)
@@ -1017,13 +1039,21 @@ jobs:
           if [[ -n "$PREV_TAG" ]]; then
             echo "### Commits since ${PREV_TAG}" >> "$NOTES_FILE"
             echo "" >> "$NOTES_FILE"
-            git log "${PREV_TAG}..${TAG_NAME}" --pretty=format:"- %s (%h)" >> "$NOTES_FILE"
+            git log "${PREV_TAG}..${TAG_NAME}" --pretty=format:"- %s (%h)" | sed 's/</\\</g; s/>/\\>/g' >> "$NOTES_FILE"
           else
             echo "### Initial Release" >> "$NOTES_FILE"
             echo "" >> "$NOTES_FILE"
-            git log --pretty=format:"- %s (%h)" -10 >> "$NOTES_FILE"
+            git log "$TAG_NAME" --pretty=format:"- %s (%h)" | sed 's/</\\</g; s/>/\\>/g' >> "$NOTES_FILE"
           fi
           
+          # Detect install.sh location
+          INSTALL_SH_PATH=$(find . -name "install.sh" ! -path "./.git/*" -maxdepth 4 | head -1 | sed 's|^\./||')
+          if [[ -n "$INSTALL_SH_PATH" ]]; then
+            INSTALL_STEP=$(printf '\nchmod +x %s && sudo ./%s' "$INSTALL_SH_PATH" "$INSTALL_SH_PATH")
+          else
+            INSTALL_STEP=""
+          fi
+
           # Add installation instructions only if tarball exists
           if [[ -n "${tarball_name:-}" && -n "${tarball_sha256:-}" ]]; then
             cat >> "$NOTES_FILE" << EOF
@@ -1033,8 +1063,7 @@ jobs:
           ### Quick Install (tarball)
           \`\`\`bash
           curl -fsSL https://github.com/$GITHUB_REPOSITORY/releases/download/${TAG_NAME}/${tarball_name} | tar xz
-          cd ${tarball_name%.tar.gz}
-          chmod +x install.sh && sudo ./install.sh
+          cd ${tarball_name%.tar.gz}${INSTALL_STEP}
           \`\`\`
           
           ## Checksums
@@ -1045,7 +1074,7 @@ jobs:
           EOF
 
             # Append build artifact checksums from SHA256SUMS.txt files
-            if [[ -f "dist/SHA256SUMS.txt" ]]; then
+            if [[ "$ALLOW_ARTIFACT_CONTENT" == "true" && -r "dist/SHA256SUMS.txt" ]]; then
               while IFS= read -r line; do
                 line="${line//$'\r'/}"
                 [[ -z "$line" ]] && continue
@@ -1065,20 +1094,19 @@ jobs:
           \`\`\`bash
           git clone https://github.com/$GITHUB_REPOSITORY.git
           cd $(basename $GITHUB_REPOSITORY)
-          git checkout ${TAG_NAME}
+          git checkout ${TAG_NAME}${INSTALL_STEP}
           \`\`\`
           
           ### Download Release Archive
           \`\`\`bash
           curl -fsSL https://github.com/$GITHUB_REPOSITORY/archive/refs/tags/${TAG_NAME}.tar.gz | tar xz
-          cd $(basename $GITHUB_REPOSITORY)-${TAG_NAME#v}
-          chmod +x install.sh && sudo ./install.sh
+          cd $(basename $GITHUB_REPOSITORY)-${TAG_NAME#v}${INSTALL_STEP}
           \`\`\`
           EOF
           fi
 
           # If build artifacts exist but no tarball, still show checksums
-          if [[ -z "${tarball_name:-}" && -f "dist/SHA256SUMS.txt" ]]; then
+          if [[ "$ALLOW_ARTIFACT_CONTENT" == "true" && -z "${tarball_name:-}" && -r "dist/SHA256SUMS.txt" ]]; then
             echo "" >> "$NOTES_FILE"
             echo "## Checksums" >> "$NOTES_FILE"
             echo "" >> "$NOTES_FILE"
@@ -1167,42 +1195,53 @@ jobs:
             echo "✅ Release created: $TAG_NAME"
           fi
 
-      - name: Add source archive checksums
+      - name: Finalise release body checksums
         if: steps.check_release.outputs.exists != 'true'
+        shell: bash
         env:
           GH_TOKEN: ${{ steps.app_token.outputs.token }}
         run: |
           TAG_NAME="${{ steps.version.outputs.tag_name }}"
-          VERSION="${{ steps.version.outputs.version }}"
-          
-          # Only add checksums if no custom tarball was built
-          if [[ -z "${tarball_name:-}" ]]; then
-            echo "📦 Calculating SHA256 for GitHub-generated source archives..."
-            
-            # Download and checksum the archives
-            TAR_URL="https://github.com/$GITHUB_REPOSITORY/archive/refs/tags/${TAG_NAME}.tar.gz"
-            ZIP_URL="https://github.com/$GITHUB_REPOSITORY/archive/refs/tags/${TAG_NAME}.zip"
-            
-            TAR_SHA=$(curl -fsSL "$TAR_URL" | sha256sum | awk '{print $1}')
-            ZIP_SHA=$(curl -fsSL "$ZIP_URL" | sha256sum | awk '{print $1}')
-            
-            echo "🔐 Source archive SHA256:"
-            echo "  tar.gz: $TAR_SHA"
-            echo "  zip: $ZIP_SHA"
-            
-            # Get current release notes and append checksums
-            CURRENT_NOTES=$(gh release view "$TAG_NAME" --json body --jq '.body')
-            
-            # Update release notes with checksums table
-            printf -v NEW_NOTES "%s\n\n## Checksums\n\n| File | SHA256 |\n|------|--------|\n| Source code (tar.gz) | \`%s\` |\n| Source code (zip) | \`%s\` |\n" \
-              "$CURRENT_NOTES" "$TAR_SHA" "$ZIP_SHA"
-            
-            gh release edit "$TAG_NAME" --notes "$NEW_NOTES"
-            echo "✅ Updated release notes with source archive checksums"
+          PREV_TAG="${{ steps.commits.outputs.prev_tag }}"
+          CHECKSUMS_MD=""
+
+          # Read SHA256 for uploaded assets from the GitHub API digest field — no download needed.
+          while IFS=$'\t' read -r asset_name asset_digest; do
+            [[ "$asset_name" == "SHA256SUMS.txt" ]] && continue
+            SHA="${asset_digest#sha256:}"
+            [[ -z "$SHA" || "$SHA" == "null" ]] && continue
+            CHECKSUMS_MD+="| ${asset_name} | \`${SHA}\` |"$'\n'
+            echo "Asset: ${asset_name} -> ${SHA}"
+          done < <(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG_NAME}" \
+            --jq '.assets[] | "\(.name)\t\(.digest)"' 2>/dev/null || true)
+
+          # GitHub-generated source archives: download and hash.
+          for _url_label in \
+            "https://github.com/${GITHUB_REPOSITORY}/archive/refs/tags/${TAG_NAME}.tar.gz|Source code (tar.gz)" \
+            "https://github.com/${GITHUB_REPOSITORY}/archive/refs/tags/${TAG_NAME}.zip|Source code (zip)"; do
+            _url="${_url_label%%|*}"
+            _label="${_url_label##*|}"
+            _hash=$(curl -fsSL "$_url" 2>/dev/null | sha256sum | awk '{print $1}') || true
+            if [[ -n "$_hash" ]]; then
+              CHECKSUMS_MD+="| ${_label} | \`${_hash}\` |"$'\n'
+              echo "${_label}: ${_hash}"
+            fi
+          done
+
+          CURRENT_BODY=$(gh release view "$TAG_NAME" --json body --jq '.body')
+          # Keep everything before ## Checksums (or before --- if no Checksums section yet).
+          PRE=$(echo "$CURRENT_BODY" | awk '/^## Checksums$/{exit} /^---$/{exit} {print}')
+          # Reconstruct footer from known values — no need to parse the existing body.
+          if [[ -n "$PREV_TAG" ]]; then
+            FOOTER=$'---\n\n**Full Changelog**: https://github.com/'"${GITHUB_REPOSITORY}/compare/${PREV_TAG}...${TAG_NAME}"$'\n\n---\n*Workflow template from [dev-control](https://github.com/XAOSTECH/dev-control)*'
           else
-            echo "⏭️ Custom tarball exists - source archive checksums not needed"
+            FOOTER=$'---\n*Workflow template from [dev-control](https://github.com/XAOSTECH/dev-control)*'
           fi
 
+          printf '%s\n\n## Checksums\n\n| File | SHA256 |\n|------|--------|\n%s\n\n%s\n' \
+            "${PRE%$'\n'}" "$CHECKSUMS_MD" "$FOOTER" > /tmp/new_body.md
+          gh release edit "$TAG_NAME" --notes-file /tmp/new_body.md
+          echo "✅ Release body updated with complete checksums"
       - name: Update 'latest' tag
         env:
           GH_TOKEN: ${{ steps.app_token.outputs.token }}
@@ -1262,3 +1301,191 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "---" >> $GITHUB_STEP_SUMMARY
           echo "*Workflow template from [dev-control](https://github.com/XAOSTECH/dev-control)*" >> $GITHUB_STEP_SUMMARY
+
+  # Visible placeholder so the Actions log URL never 404s when fix mode is active.
+  release_routing:
+    name: Release (skipped — fix mode active)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.fix_release == 'true'
+    steps:
+      - name: Redirect notice
+        shell: bash
+        run: |
+          echo "Normal release flow was skipped because fix_release is checked." | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "See the **Backfill release notes** job in this run for the active work." | tee -a "$GITHUB_STEP_SUMMARY"
+
+  fix:
+    name: Backfill release notes
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.fix_release == 'true'
+
+    steps:
+      - name: Generate App Token
+        id: app_token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets['XB_CI'] }}
+          private-key: ${{ secrets['XB_PK'] }}
+
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          token: ${{ steps.app_token.outputs.token }}
+
+      - name: Validate inputs and resolve tag
+        id: validate
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        shell: bash
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          # Sanitise typos: trim spaces, replace commas with dots, strip repeated 'v' prefix.
+          VERSION="${VERSION// /}"
+          VERSION="${VERSION//,/.}"
+          VERSION="${VERSION#v}"; VERSION="${VERSION#v}"
+          [[ "$VERSION" =~ ^v ]] || VERSION="v${VERSION}"
+          if [[ -z "${VERSION#v}" ]]; then
+            echo "::error::version is required when fix_release is checked"
+            exit 1
+          fi
+          # Validate sanitised result is semver.
+          if [[ ! "${VERSION#v}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?$ ]]; then
+            echo "::error::version '${VERSION}' is not valid semver after sanitisation (expected vX.Y.Z)"
+            exit 1
+          fi
+          if ! git tag -l "$VERSION" | grep -q .; then
+            echo "::error::Tag $VERSION does not exist in this repository"
+            exit 1
+          fi
+          if ! gh release view "$VERSION" &>/dev/null 2>&1; then
+            echo "::error::No GitHub release found for $VERSION"
+            exit 1
+          fi
+          echo "tag_name=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION#v}" >> "$GITHUB_OUTPUT"
+          echo "Fixing notes for $VERSION"
+
+      - name: Find previous release tag
+        id: prev
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        shell: bash
+        run: |
+          TAG_NAME="${{ steps.validate.outputs.tag_name }}"
+          PREV_TAG=""
+          while IFS= read -r _tag; do
+            [[ "$_tag" == "$TAG_NAME" ]] && break
+            if gh release view "$_tag" &>/dev/null 2>&1; then
+              PREV_TAG="$_tag"
+            fi
+          done < <(git tag -l 'v*' --sort=version:refname | grep -vE 'latest|alpha|beta|rc')
+          echo "prev_tag=$PREV_TAG" >> "$GITHUB_OUTPUT"
+          echo "Previous release: ${PREV_TAG:-none (initial release)}"
+
+      - name: Freshly compute all release asset checksums
+        id: checksums
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        shell: bash
+        run: |
+          TAG_NAME="${{ steps.validate.outputs.tag_name }}"
+          mkdir -p /tmp/fix-assets
+          CHECKSUMS_MD=""
+
+          # Download each uploaded asset and compute a fresh SHA256
+          while IFS= read -r asset_name; do
+            [[ "$asset_name" == "SHA256SUMS.txt" ]] && continue
+            echo "Downloading asset: $asset_name"
+            if gh release download "$TAG_NAME" --pattern "$asset_name" --dir /tmp/fix-assets --clobber 2>/dev/null; then
+              FRESH_HASH=$(sha256sum "/tmp/fix-assets/$asset_name" | awk '{print $1}')
+              echo "  fresh SHA256: $FRESH_HASH"
+              SIDECAR="${asset_name}.sha256"
+              if gh release download "$TAG_NAME" --pattern "$SIDECAR" --dir /tmp/fix-assets --clobber 2>/dev/null; then
+                STORED_HASH=$(awk '{print $1}' "/tmp/fix-assets/$SIDECAR")
+                if [[ "$FRESH_HASH" == "$STORED_HASH" ]]; then
+                  echo "  verified against $SIDECAR — match"
+                else
+                  echo "::warning::SHA256 mismatch for $asset_name: fresh=$FRESH_HASH stored=$STORED_HASH"
+                fi
+              fi
+              CHECKSUMS_MD+="| ${asset_name} | \`${FRESH_HASH}\` |"$'\n'
+            fi
+          done < <(gh release view "$TAG_NAME" --json assets --jq '.assets[].name')
+
+          # Freshly compute SHA256 for the GitHub-generated source archives
+          TAR_URL="https://github.com/$GITHUB_REPOSITORY/archive/refs/tags/${TAG_NAME}.tar.gz"
+          ZIP_URL="https://github.com/$GITHUB_REPOSITORY/archive/refs/tags/${TAG_NAME}.zip"
+          TAR_SHA=$(curl -fsSL "$TAR_URL" | sha256sum | awk '{print $1}')
+          ZIP_SHA=$(curl -fsSL "$ZIP_URL" | sha256sum | awk '{print $1}')
+          echo "Source tar.gz SHA256: $TAR_SHA"
+          echo "Source zip    SHA256: $ZIP_SHA"
+          CHECKSUMS_MD+="| Source code (tar.gz) | \`${TAR_SHA}\` |"$'\n'
+          CHECKSUMS_MD+="| Source code (zip) | \`${ZIP_SHA}\` |"
+
+          printf '%s' "$CHECKSUMS_MD" > /tmp/fix-assets/checksums.md
+
+      - name: Regenerate release notes
+        id: notes
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        shell: bash
+        run: |
+          TAG_NAME="${{ steps.validate.outputs.tag_name }}"
+          VERSION="${{ steps.validate.outputs.version }}"
+          PREV_TAG="${{ steps.prev.outputs.prev_tag }}"
+          NOTES_FILE=$(mktemp)
+
+          printf $'## What\'s Changed\n\n' > "$NOTES_FILE"
+
+          if [[ -n "$PREV_TAG" ]]; then
+            printf '### Commits since %s\n\n' "$PREV_TAG" >> "$NOTES_FILE"
+            git log "${PREV_TAG}..${TAG_NAME}" --pretty=format:'- %s (%h)' | sed 's/</\\</g; s/>/\\>/g' >> "$NOTES_FILE"
+          else
+            printf '### Initial Release\n\n' >> "$NOTES_FILE"
+            git log "$TAG_NAME" --pretty=format:'- %s (%h)' | sed 's/</\\</g; s/>/\\>/g' >> "$NOTES_FILE"
+          fi
+
+          printf '\n\n## Installation\n\n' >> "$NOTES_FILE"
+
+          TARBALL_ASSET=$(gh release view "$TAG_NAME" --json assets \
+            --jq '[.assets[] | select(.name | endswith(".tar.gz"))] | .[0].name // empty')
+          INSTALL_SH_PATH=$(find . -name "install.sh" ! -path "./.git/*" -maxdepth 4 | head -1 | sed 's|^\./||')
+          if [[ -n "$TARBALL_ASSET" ]]; then
+            printf '### Quick Install (tarball)\n```bash\ncurl -fsSL https://github.com/%s/releases/download/%s/%s | tar xz\ncd %s\n' \
+              "$GITHUB_REPOSITORY" "$TAG_NAME" "$TARBALL_ASSET" "${TARBALL_ASSET%.tar.gz}" >> "$NOTES_FILE"
+            if [[ -n "$INSTALL_SH_PATH" ]]; then
+              printf 'chmod +x %s && sudo ./%s\n' "$INSTALL_SH_PATH" "$INSTALL_SH_PATH" >> "$NOTES_FILE"
+            fi
+            printf '```\n' >> "$NOTES_FILE"
+          else
+            printf '### From Source\n```bash\ngit clone https://github.com/%s.git\ncd %s\ngit checkout %s\n' \
+              "$GITHUB_REPOSITORY" "${GITHUB_REPOSITORY##*/}" "$TAG_NAME" >> "$NOTES_FILE"
+            if [[ -n "$INSTALL_SH_PATH" ]]; then
+              printf 'chmod +x %s && sudo ./%s\n' "$INSTALL_SH_PATH" "$INSTALL_SH_PATH" >> "$NOTES_FILE"
+            fi
+            printf '```\n' >> "$NOTES_FILE"
+          fi
+
+          printf '\n## Checksums\n\n| File | SHA256 |\n|------|--------|\n' >> "$NOTES_FILE"
+          cat /tmp/fix-assets/checksums.md >> "$NOTES_FILE"
+
+          if [[ -n "$PREV_TAG" ]]; then
+            printf '\n\n---\n\n**Full Changelog**: https://github.com/%s/compare/%s...%s\n\n---\n' \
+              "$GITHUB_REPOSITORY" "$PREV_TAG" "$TAG_NAME" >> "$NOTES_FILE"
+          fi
+          printf '*Release workflow powered by [dev-control](https://github.com/XAOSTECH/dev-control)*\n' >> "$NOTES_FILE"
+
+          echo "notes_file=$NOTES_FILE" >> "$GITHUB_OUTPUT"
+          echo "--- generated notes ---"
+          cat "$NOTES_FILE"
+
+      - name: Update release body (tag and assets unchanged)
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+          NOTES_FILE: ${{ steps.notes.outputs.notes_file }}
+        shell: bash
+        run: |
+          TAG_NAME="${{ steps.validate.outputs.tag_name }}"
+          gh release edit "$TAG_NAME" --notes-file "$NOTES_FILE"
+          echo "✅ Release body updated for $TAG_NAME (tag SHA and assets unchanged)" | tee -a "$GITHUB_STEP_SUMMARY"

@@ -34,6 +34,8 @@ env:
 jobs:
   detect:
     name: Detect languages
+    # Skip push-triggered runs for PR merge commits — the PR scan already covered them
+    if: github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'Merge pull request')
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.detect.outputs.matrix }}
@@ -41,7 +43,7 @@ jobs:
       has-languages: ${{ steps.detect.outputs.has-languages }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Detect CodeQL languages from repository contents
         id: detect
@@ -92,7 +94,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Initialise CodeQL (${{ matrix.language }} / ${{ matrix.build-mode }})
         uses: github/codeql-action/init@v4

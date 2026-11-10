@@ -14,6 +14,8 @@ on:
 permissions:
   pull-requests: read
   contents: read
+  checks: read
+  actions: read
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -28,7 +30,7 @@ jobs:
     steps:
       - name: Validate PR author and labels
         id: check
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const { owner, repo } = context.repo;
@@ -67,6 +69,68 @@ jobs:
               core.info(`✅ PR #${prNumber} validated: ${reason}`);
             } else {
               core.info(`❌ PR #${prNumber} rejected: ${reason}`);
+            }
+
+      - name: Wait for required CI checks
+        if: steps.check.outputs.should_merge == 'true'
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const sha = context.payload.pull_request.head.sha;
+            const timeoutMs = 15 * 60 * 1000;
+            const pollMs = 30 * 1000;
+
+            // Grace period: let sibling workflows register their check runs
+            await new Promise(r => setTimeout(r, 30_000));
+
+            // Identify this run's check suite to exclude our own check runs
+            const { data: runData } = await github.rest.actions.getWorkflowRun({
+              owner, repo, run_id: parseInt(process.env.GITHUB_RUN_ID),
+            });
+            // Collect all suite IDs for every run of this workflow on this SHA
+            // so concurrent runs (opened + labeled firing together) don't deadlock
+            const { data: sameWfRuns } = await github.rest.actions.listWorkflowRuns({
+              owner, repo, workflow_id: runData.workflow_id, head_sha: sha, per_page: 50,
+            });
+            const selfSuiteIds = new Set(sameWfRuns.workflow_runs.map(r => r.check_suite_id));
+
+            const deadline = Date.now() + timeoutMs;
+
+            while (true) {
+              const { data } = await github.rest.checks.listForRef({
+                owner, repo, ref: sha, per_page: 100,
+              });
+
+              // Exclude check runs from any run of this workflow on this SHA
+              const others = data.check_runs.filter(r => !selfSuiteIds.has(r.check_suite?.id));
+
+              if (others.length === 0) {
+                core.info('No other check runs found — proceeding');
+                break;
+              }
+
+              const failed = others.filter(r =>
+                r.status === 'completed' &&
+                !['success', 'neutral', 'skipped'].includes(r.conclusion)
+              );
+              if (failed.length > 0) {
+                const names = failed.map(r => `${r.name}: ${r.conclusion}`).join(', ');
+                throw new Error(`Required checks did not pass: ${names}`);
+              }
+
+              const pending = others.filter(r => r.status !== 'completed');
+              if (pending.length === 0) {
+                core.info(`All ${others.length} check(s) passed ✓`);
+                break;
+              }
+
+              if (Date.now() + pollMs > deadline) {
+                throw new Error(`Timed out waiting for: ${pending.map(r => r.name).join(', ')}`);
+              }
+
+              core.info(`${pending.length} check(s) pending — polling in 30s`);
+              await new Promise(r => setTimeout(r, pollMs));
             }
 
       - name: Save validation result

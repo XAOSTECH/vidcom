@@ -135,6 +135,26 @@ on:
         required: false
         type: number
         default: 30
+      run_humanise:
+        description: 'Trigger humanise workflow (rejoin hard-wrapped comments and prose)'
+        required: false
+        type: boolean
+        default: true
+      run_anglicise:
+        description: 'Trigger anglicise workflow (convert American to British English)'
+        required: false
+        type: boolean
+        default: true
+      run_codeql:
+        description: 'Trigger a fresh CodeQL scan before auto-remediate (slow — off by default)'
+        required: false
+        type: boolean
+        default: false
+      run_auto_remediate:
+        description: 'Trigger auto-remediate workflow (ShellCheck, shfmt, CodeQL pattern fixes)'
+        required: false
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -163,7 +183,7 @@ jobs:
           private-key: ${{ secrets['XB_PK'] }}
 
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0  # Full history for commit counting
           submodules: recursive
@@ -761,6 +781,115 @@ jobs:
             echo "📌 **$COMMENTED item(s) marked as stale**" >> $GITHUB_STEP_SUMMARY
           fi
 
+      - name: Trigger humanise workflow
+        id: trigger_humanise
+        if: ${{ github.event.inputs.run_humanise != 'false' && github.event.inputs.dry_run != 'true' }}
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        run: |
+          echo "## ✍️ Humanise" >> $GITHUB_STEP_SUMMARY
+          _BEFORE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          gh workflow run humanise.yml --ref ${{ github.ref_name }}
+          _RUN_ID=""
+          for _i in 1 2 3 4 5 6 7 8; do
+            sleep 10
+            _RUN_ID=$(gh run list --workflow humanise.yml --limit 5 \
+              --json databaseId,createdAt \
+              --jq "[.[] | select(.createdAt >= \"$_BEFORE\") | .databaseId][0]" 2>/dev/null || true)
+            [[ -n "$_RUN_ID" && "$_RUN_ID" != "null" ]] && break
+          done
+          if [[ -n "$_RUN_ID" && "$_RUN_ID" != "null" ]]; then
+            if gh run watch "$_RUN_ID" --exit-status 2>/dev/null; then
+              echo "✅ **humanise.yml completed** (run $_RUN_ID)" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "❌ **humanise.yml failed** (run $_RUN_ID) — check the run for details" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "⚠️ Could not locate dispatched humanise run" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Trigger anglicise workflow
+        id: trigger_anglicise
+        if: ${{ github.event.inputs.run_anglicise != 'false' && github.event.inputs.dry_run != 'true' }}
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        run: |
+          echo "## 🇬🇧 Anglicise" >> $GITHUB_STEP_SUMMARY
+          _BEFORE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          gh workflow run anglicise.yml --ref ${{ github.ref_name }}
+          _RUN_ID=""
+          for _i in 1 2 3 4 5 6 7 8; do
+            sleep 10
+            _RUN_ID=$(gh run list --workflow anglicise.yml --limit 5 \
+              --json databaseId,createdAt \
+              --jq "[.[] | select(.createdAt >= \"$_BEFORE\") | .databaseId][0]" 2>/dev/null || true)
+            [[ -n "$_RUN_ID" && "$_RUN_ID" != "null" ]] && break
+          done
+          if [[ -n "$_RUN_ID" && "$_RUN_ID" != "null" ]]; then
+            if gh run watch "$_RUN_ID" --exit-status 2>/dev/null; then
+              echo "✅ **anglicise.yml completed** (run $_RUN_ID)" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "❌ **anglicise.yml failed** (run $_RUN_ID) — check the run for details" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "⚠️ Could not locate dispatched anglicise run" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Trigger CodeQL scan
+        id: trigger_codeql
+        if: ${{ github.event.inputs.run_codeql == 'true' && github.event.inputs.dry_run != 'true' }}
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        run: |
+          echo "## 🔬 CodeQL Scan" >> $GITHUB_STEP_SUMMARY
+          _BEFORE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          gh workflow run codeql.yml --ref ${{ github.ref_name }}
+          _RUN_ID=""
+          for _i in 1 2 3 4 5 6 7 8; do
+            sleep 10
+            _RUN_ID=$(gh run list --workflow codeql.yml --limit 5 \
+              --json databaseId,createdAt \
+              --jq "[.[] | select(.createdAt >= \"$_BEFORE\") | .databaseId][0]" 2>/dev/null || true)
+            [[ -n "$_RUN_ID" && "$_RUN_ID" != "null" ]] && break
+          done
+          if [[ -n "$_RUN_ID" && "$_RUN_ID" != "null" ]]; then
+            echo "⏳ Waiting for CodeQL scan $_RUN_ID (this may take several minutes)..." | tee -a $GITHUB_STEP_SUMMARY
+            if gh run watch "$_RUN_ID" --exit-status 2>/dev/null; then
+              echo "✅ **codeql.yml completed** (run $_RUN_ID)" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "❌ **codeql.yml failed** (run $_RUN_ID) — check the run for details" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "⚠️ Could not locate dispatched CodeQL run" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Trigger auto-remediate workflow
+        id: trigger_auto_remediate
+        if: ${{ github.event.inputs.run_auto_remediate != 'false' && github.event.inputs.dry_run != 'true' }}
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        run: |
+          echo "## 🛡️ Auto-Remediate" >> $GITHUB_STEP_SUMMARY
+          _BEFORE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          gh workflow run auto-remediate.yml --ref ${{ github.ref_name }}
+          _RUN_ID=""
+          for _i in 1 2 3 4 5 6 7 8; do
+            sleep 10
+            _RUN_ID=$(gh run list --workflow auto-remediate.yml --limit 5 \
+              --json databaseId,createdAt \
+              --jq "[.[] | select(.createdAt >= \"$_BEFORE\") | .databaseId][0]" 2>/dev/null || true)
+            [[ -n "$_RUN_ID" && "$_RUN_ID" != "null" ]] && break
+          done
+          if [[ -n "$_RUN_ID" && "$_RUN_ID" != "null" ]]; then
+            if gh run watch "$_RUN_ID" --exit-status 2>/dev/null; then
+              echo "✅ **auto-remediate.yml completed** (run $_RUN_ID)" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "❌ **auto-remediate.yml failed** (run $_RUN_ID) — check the run for details" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "⚠️ Could not locate dispatched auto-remediate run" >> $GITHUB_STEP_SUMMARY
+          fi
+
       - name: Check and trigger tree visualisation
         id: check_tree_viz
         if: ${{ github.event.inputs.update_tree_viz != 'false' && github.event.inputs.dry_run != 'true' }}
@@ -851,4 +980,8 @@ jobs:
           echo "- **Submodule threshold:** ${{ github.event.inputs.submodule_threshold || '5' }} commits" >> $GITHUB_STEP_SUMMARY
           echo "- **Branch age:** ${{ github.event.inputs.branch_age_days || '5' }} days" >> $GITHUB_STEP_SUMMARY
           echo "- **Stale threshold:** ${{ github.event.inputs.stale_days || '10' }} days" >> $GITHUB_STEP_SUMMARY
+          echo "- **Humanise:** ${{ github.event.inputs.run_humanise != 'false' && '✅ Enabled' || '❌ Disabled' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Anglicise:** ${{ github.event.inputs.run_anglicise != 'false' && '✅ Enabled' || '❌ Disabled' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **CodeQL scan:** ${{ github.event.inputs.run_codeql == 'true' && '✅ Enabled' || '❌ Disabled' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Auto-remediate:** ${{ github.event.inputs.run_auto_remediate != 'false' && '✅ Enabled' || '❌ Disabled' }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Dry run:** ${{ github.event.inputs.dry_run == 'true' && '🔍 Yes' || '❌ No' }}" >> $GITHUB_STEP_SUMMARY

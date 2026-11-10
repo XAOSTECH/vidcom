@@ -1,0 +1,47 @@
+# Template created by https://github.com/XAOSTECH/dev-control
+# See templates folder documentation for details.
+
+name: Tests
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master]
+
+permissions:
+  contents: read
+  checks: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  test:
+    name: Run test suite
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install bats
+        if: hashFiles('tests/run_tests.sh') != ''
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bats
+          git clone --depth 1 https://github.com/bats-core/bats-support.git tests/test_helper/bats-support
+          git clone --depth 1 https://github.com/bats-core/bats-assert.git tests/test_helper/bats-assert
+
+      - name: Run tests
+        run: |
+          if [[ ! -f ./tests/run_tests.sh ]]; then
+            echo "No tests/run_tests.sh found — no test suite in this repo, skipping"
+            exit 0
+          fi
+          chmod +x ./tests/run_tests.sh
+          ./tests/run_tests.sh
+
+      - name: ShellCheck
+        run: sudo apt-get install -y shellcheck && find scripts -name '*.sh' -print0 | xargs -0 shellcheck 2>/dev/null || true
+        continue-on-error: true

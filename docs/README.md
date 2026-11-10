@@ -3,8 +3,18 @@
 <p align="center">
   <a href="https://github.com/XAOSTECH/vidcom"><img alt="GitHub repo" src="https://img.shields.io/badge/GitHub-XAOSTECH%2Fvidcom-181717?style=for-the-badge&logo=github"></a>
   <a href="https://github.com/XAOSTECH/vidcom/releases"><img alt="GitHub release" src="https://img.shields.io/github/v/release/XAOSTECH/vidcom?style=for-the-badge&logo=semantic-release&color=blue"></a>
-  <a href="https://github.com/XAOSTECH/vidcom/blob/main/LICENCE"><img alt="Licence" src="https://img.shields.io/badge/licence-GPL--3.0-green?style=for-the-badge"></a>
+  <a href="https://github.com/XAOSTECH/vidcom/blob/main/LICENSE"><img alt="Licence" src="https://img.shields.io/badge/licence-GPL--3.0-green?style=for-the-badge"></a>
 </p>
+
+
+
+
+
+
+
+
+
+
 
 
 

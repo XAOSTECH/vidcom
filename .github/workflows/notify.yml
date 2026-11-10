@@ -1,0 +1,88 @@
+name: Suppress CI Notifications
+on:
+  workflow_run:
+    workflows:
+      - Anglicise
+      - Automerge
+      - Auto-Remediate
+      - Bash Linting
+      - Bash Linting with Auto-Fix Suggestions
+      - British English Spelling Check
+      - CodeQL
+      - Dependabot Auto-Label
+      - Deploy to GitHub Pages
+      - Git Tree Visualisation
+      - Humanise Comments and Prose
+      - Initialise Documentation
+      - Initialise Repository Templates
+      - Release
+      - Repository Update
+      - Rotate Bot GPG Key
+      - Security Auto-Fix Bot
+      - Sign Artefacts
+      - Tests
+      - Text Replacement
+      - Validate PR for Automerge
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  dismiss:
+    # Always run so the self-cleanup step can dismiss stale suppress-notifications runs
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for GitHub notification creation
+        run: sleep 10
+
+      - name: Dismiss triggered workflow's notification
+        if: github.event.workflow_run.conclusion != 'failure'
+        env:
+          GH_TOKEN: ${{ secrets['US_UT'] }}
+        run: |
+          RUN_ID="${{ github.event.workflow_run.id }}"
+          # check_suite_id covers CheckSuite-typed notifications (GitHub still sends both types)
+          SUITE_ID=$(gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" \
+            --jq '.check_suite_id // empty' 2>/dev/null || echo "")
+          THREAD_ID=$(gh api "/notifications?per_page=100&all=true" \
+            --jq ".[] | select(
+              (.subject.url | test(\"/${RUN_ID}$\")) or
+              (\"${SUITE_ID}\" != \"\" and (.subject.url | test(\"/${SUITE_ID}$\")))
+            ) | .id" | head -1)
+          if [[ -n "$THREAD_ID" ]]; then
+            gh api "/notifications/threads/${THREAD_ID}" -X PATCH -f state=done 2>/dev/null || true
+            echo "Dismissed thread ${THREAD_ID} for run ${RUN_ID}"
+          else
+            echo "No notification found for run ${RUN_ID} (suite ${SUITE_ID})"
+          fi
+
+      - name: Dismiss previous suppress-notifications runs
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets['US_UT'] }}
+        run: |
+          NOTIFY_WF_ID=$(gh api "/repos/${GITHUB_REPOSITORY}/actions/workflows" \
+            --jq '.workflows[] | select(.path | endswith("notify.yml")) | .id' | head -1 || echo "")
+          if [[ -z "$NOTIFY_WF_ID" ]]; then
+            echo "Could not resolve notify workflow ID"
+            exit 0
+          fi
+          # Build a set of run IDs and check suite IDs from recent notify runs
+          declare -A NOTIFY_IDS
+          while IFS='|' read -r run_id suite_id; do
+            [[ -n "$run_id" ]] && NOTIFY_IDS["$run_id"]=1
+            [[ -n "$suite_id" ]] && NOTIFY_IDS["$suite_id"]=1
+          done < <(gh api "/repos/${GITHUB_REPOSITORY}/actions/workflows/${NOTIFY_WF_ID}/runs?per_page=20" \
+            --jq '.workflow_runs[] | "\(.id)|\(.check_suite_id)"')
+          COUNT=0
+          while IFS='|' read -r tid url; do
+            resource_id="${url##*/}"
+            if [[ -n "${NOTIFY_IDS[$resource_id]:-}" ]]; then
+              gh api "/notifications/threads/${tid}" -X PATCH -f state=done 2>/dev/null || true
+              COUNT=$((COUNT + 1))
+            fi
+          done < <(gh api "/notifications?per_page=100&all=true" \
+            --jq ".[] | select(.repository.full_name == \"${GITHUB_REPOSITORY}\") | \"\(.id)|\(.subject.url)\"")
+          echo "Dismissed ${COUNT} suppress-notifications thread(s)"

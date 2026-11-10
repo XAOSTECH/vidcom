@@ -70,7 +70,7 @@ jobs:
           private-key: ${{ secrets['XB_PK'] }}
 
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           token: ${{ steps.app_token.outputs.token }}
@@ -219,6 +219,22 @@ jobs:
           }
 
           my @out = $mode eq 'md' ? reflow_md(\@l) : reflow_comments(\@l, $mk);
+          # Second pass for shell files: also reflow heredoc prose blocks
+          if ($mode eq 'hash') {
+              my @final;
+              my ($in_hd, $delim) = (0, '');
+              my @hd_lines;
+              for my $line (@out) {
+                  if (!$in_hd && $line =~ /<<['"](EOF|HELP|USAGE|HELPDOC)['"\s]*$/) {
+                      $delim = $1; $in_hd = 1; @hd_lines = (); push @final, $line;
+                  } elsif ($in_hd && $line =~ /^$delim\s*$/) {
+                      push @final, reflow_md(\@hd_lines); push @final, $line; $in_hd = 0;
+                  } elsif ($in_hd) { push @hd_lines, $line; }
+                  else { push @final, $line; }
+              }
+              push @final, @hd_lines if $in_hd;
+              @out = @final;
+          }
           open my $o, '>', $file or die "write $file: $!\n";
           print $o join("\n", @out);
           print $o "\n" if $final_nl;

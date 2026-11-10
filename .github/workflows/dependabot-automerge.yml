@@ -1,0 +1,80 @@
+name: Dependabot Auto-Label
+
+# Runs in base-branch (privileged) context — safe because we gate on github.actor == 'dependabot[bot]' and never execute PR code.
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  pull-requests: write
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  autolabel:
+    name: Label Dependabot PR for automerge
+    runs-on: ubuntu-latest
+    if: github.actor == 'dependabot[bot]'
+
+    steps:
+      - name: Get bot token
+        id: app_token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.XB_CI }}
+          private-key: ${{ secrets.XB_PK }}
+
+      - name: Decide whether to automerge
+        id: decide
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          # Grouped PRs ("Bump the X group with Y updates") are always minor/patch by config
+          if echo "$PR_TITLE" | grep -qiE 'bump the .+ group'; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "reason=grouped minor/patch update" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Individual bump — compare leading major version numbers
+          FROM=$(echo "$PR_TITLE" | grep -oP 'from \K[0-9]+' | head -1 || true)
+          TO=$(echo "$PR_TITLE"   | grep -oP 'to \K[0-9]+'   | head -1 || true)
+
+          if [[ -n "$FROM" && -n "$TO" && "$FROM" != "$TO" ]]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "reason=major version bump from $FROM to $TO — requires manual review" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "reason=minor/patch update" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Add automerge label
+        if: steps.decide.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REASON: ${{ steps.decide.outputs.reason }}
+        run: |
+          gh pr edit "$PR_NUMBER" --repo "${{ github.repository }}" --add-label "automerge"
+          echo "✅ Added automerge label — $REASON"
+
+      - name: Approve PR
+        if: steps.decide.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr review "$PR_NUMBER" --repo "${{ github.repository }}" --approve \
+            --body "Automated approval: minor/patch dependency update — safe to merge."
+
+      - name: Comment on major-version skip
+        if: steps.decide.outputs.skip == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REASON: ${{ steps.decide.outputs.reason }}
+        run: |
+          gh pr comment "$PR_NUMBER" --repo "${{ github.repository }}" \
+            --body "⚠️ **Major version bump detected** — $REASON. Manual review required before merging."

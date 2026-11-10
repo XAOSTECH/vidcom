@@ -3,11 +3,9 @@
 
 name: Auto-Remediate
 
-# Tie all security and lint workflows together: collect findings, apply
-# deterministic patches (ShellCheck diff-patch, known CodeQL patterns), use
+# Tie all security and lint workflows together: collect findings, apply deterministic patches (ShellCheck diff-patch, known CodeQL patterns), use
 # GitHub Models to generate suggestions for harder alerts, then open a signed
-# PR via the bot. The PR carries the `automerge` label so the automerge
-# workflow can merge it without manual review when tests pass.
+# PR via the bot. The PR carries the `automerge` label so the automerge workflow can merge it without manual review when tests pass.
 
 on:
   workflow_run:
@@ -59,7 +57,7 @@ jobs:
           private-key: ${{ secrets['XB_PK'] }}
 
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           token: ${{ steps.app_token.outputs.token }}
@@ -143,7 +141,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          ALERT_LIST=$(jq -r '.[] | "- [\(.severity | ascii_upcase)] `\(.rule)` — `\(.file):\(.line)` — \(.message)"' \
+          ALERT_LIST=$(jq -r '.[] | "- [\(.severity | ascii_upcase)] \(.rule) — \(.file):\(.line) — \(.message)"' \
             /tmp/alerts.json 2>/dev/null | head -20 || true)
           echo "alert_list<<EOF" >> "$GITHUB_OUTPUT"
           echo "$ALERT_LIST" >> "$GITHUB_OUTPUT"
@@ -170,20 +168,38 @@ jobs:
         if: steps.changes.outputs.has_changes == 'true' && github.event.inputs.dry_run != 'true'
         env:
           GH_TOKEN: ${{ steps.app_token.outputs.token }}
+          ALERT_LIST: ${{ steps.summary.outputs.alert_list }}
+          AI_HINTS: ${{ steps.summary.outputs.ai_hints }}
+          REPO: ${{ github.repository }}
         run: |
           BRANCH="fix/auto-remediate-$(date -u +%Y%m%d-%H%M%S)"
           git checkout -b "$BRANCH"
           git add -A
           git commit -S -m "fix(security): apply automated ShellCheck and CodeQL remediation"
           git push origin "$BRANCH"
-          printf 'Changes\nShellCheck: %s files patched (%s issues)\nCodeQL: %s fixes\nAlerts: %s\n%s\nAI hints:\n%s\n%s/security/code-scanning\n' \
+          # Prune stale fix/auto-remediate-* remote branches; keep the 5 most recent.
+          gh api "repos/${{ github.repository }}/branches" --paginate --jq '.[].name' \
+            | grep '^fix/auto-remediate-' | sort -r | tail -n +6 \
+            | while IFS= read -r _b; do
+                git push origin --delete "$_b" 2>/dev/null && echo "Pruned: $_b" || true
+              done
+          # Bail if a previous run already opened an auto-remediate PR on this repo.
+          OPEN=$(gh pr list --repo "${{ github.repository }}" --state open --json title \
+            --jq '[.[] | select(.title == "Auto-Remediation: Security and Lint Fixes")] | length' \
+            2>/dev/null || echo 0)
+          if [[ "$OPEN" -gt 0 ]]; then
+            echo "An auto-remediate PR is already open — skipping duplicate creation"
+            git push origin --delete "$BRANCH" 2>/dev/null || true
+            exit 0
+          fi
+          printf 'Changes\nShellCheck: %s files patched (%s issues)\nCodeQL: %s fixes\nAlerts: %s\n%s\nAI hints:\n%s\nhttps://github.com/%s/security/code-scanning\n' \
             "${{ steps.shellcheck.outputs.patched }}" \
             "${{ steps.shellcheck.outputs.total }}" \
             "${{ steps.codeql_fixes.outputs.fixed }}" \
             "${{ steps.alerts.outputs.count }}" \
-            "${{ steps.summary.outputs.alert_list }}" \
-            "${{ steps.summary.outputs.ai_hints }}" \
-            "https://github.com/${{ github.repository }}" > /tmp/pr_body.md
+            "$ALERT_LIST" \
+            "$AI_HINTS" \
+            "$REPO" > /tmp/pr_body.md
           gh pr create \
             --repo "${{ github.repository }}" \
             --base main \
@@ -196,13 +212,17 @@ jobs:
         if: steps.changes.outputs.has_changes == 'false' && steps.alerts.outputs.count > 0
         env:
           GH_TOKEN: ${{ steps.app_token.outputs.token }}
+          ALERT_LIST: ${{ steps.summary.outputs.alert_list }}
+          AI_HINTS: ${{ steps.summary.outputs.ai_hints }}
+          REPO: ${{ github.repository }}
         run: |
-          OPEN=$(gh issue list --state open --label security-review --json number --jq 'length' 2>/dev/null || echo 0)
-          [[ "$OPEN" -gt 0 ]] && { echo "Security review issue already open"; exit 0; }
+          gh label create "security-review" --color "#e11d48" --description "Security alerts requiring manual review" --force 2>/dev/null || true
+          OPEN=$(gh issue list --state open \
+            --search '"Security Alerts Require Manual Review" in:title' \
+            --json number --jq 'length' 2>/dev/null || echo 0)
+          [[ "$OPEN" -gt 0 ]] && { echo "Tracking issue already open — skipping"; exit 0; }
           printf 'Open alerts requiring manual review\n\n%s\n\nAI hints:\n%s\n\nhttps://github.com/%s/security/code-scanning\n' \
-            "${{ steps.summary.outputs.alert_list }}" \
-            "${{ steps.summary.outputs.ai_hints }}" \
-            "${{ github.repository }}" > /tmp/issue_body.md
+            "$ALERT_LIST" "$AI_HINTS" "$REPO" > /tmp/issue_body.md
           gh issue create \
             --title "Security Alerts Require Manual Review" \
             --label "security-review,help-wanted" \

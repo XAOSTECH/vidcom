@@ -49,7 +49,7 @@ jobs:
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -66,7 +66,7 @@ jobs:
           
           # Run ShellCheck for all scripts
           find . -type f -name "*.sh" ! -path "./.git/*" ! -path "./node_modules/*" ! -path "./vendor/*" \
-            -exec shellcheck -f json {} + > /tmp/lint/results.json 2>&1 || true
+            -exec shellcheck --shell=bash -f json {} + > /tmp/lint/results.json 2>&1 || true
           
           # Count issues
           ERRORS=$(jq '[.[] | select(.level=="error")] | length' /tmp/lint/results.json 2>/dev/null || echo "0")
@@ -85,7 +85,8 @@ jobs:
             exit 0
           fi
           
-          jq -r '.[] | "::notice file=\(.file),line=\(.line),col=\(.column)::[\(.code)] \(.message) - See: https://www.shellcheck.net/wiki/\(.code)"' /tmp/lint/results.json 2>/dev/null || true
+          jq -r '.[] | if .level == "error" then "::error" elif .level == "warning" then "::warning" else "::notice" end + " file=\(.file),line=\(.line),col=\(.column)::[SC\(.code)] \(.message) — https://www.shellcheck.net/wiki/SC\(.code)"' \
+            /tmp/lint/results.json 2>/dev/null || true
 
       - name: Generate suggestions markdown
         id: suggestions
@@ -121,7 +122,7 @@ jobs:
 
       - name: Suggest fixes on PR
         if: github.event_name == 'pull_request' && (steps.shellcheck.outputs.errors > 0 || steps.shellcheck.outputs.warnings > 0)
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const fs = require('fs');
@@ -171,7 +172,7 @@ jobs:
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -194,14 +195,14 @@ jobs:
           gpg-private-key: ${{ secrets['XB_GK'] }}
           gpg-passphrase: ${{ secrets['XB_GP'] }}
           user-token: ${{ secrets['XB_UT'] }}
-          bot-name: xaos-bot
+          bot-name: ${{ vars.BOT_NAME || 'xaos-bot' }}
 
       - name: Run ShellCheck to find issues
         id: check
         continue-on-error: true
         run: |
           find . -type f -name "*.sh" ! -path "./.git/*" ! -path "./node_modules/*" ! -path "./vendor/*" \
-            -exec shellcheck -f json {} + > /tmp/lint/results.json 2>&1 || true
+            -exec shellcheck --shell=bash -f json {} + > /tmp/lint/results.json 2>&1 || true
           
           ERRORS=$(jq '[.[] | select(.level=="error")] | length' /tmp/lint/results.json 2>/dev/null || echo "0")
           echo "errors=$ERRORS" >> $GITHUB_OUTPUT
@@ -210,6 +211,13 @@ jobs:
       - name: Apply style fixes with shfmt
         if: steps.check.outputs.has_fixes == 'true'
         run: |
+          echo "Adding missing shebangs..."
+          find . -type f -name "*.sh" ! -path "./.git/*" ! -path "./node_modules/*" ! -path "./vendor/*" | while IFS= read -r f; do
+            if ! head -1 "$f" | grep -q '^#!'; then
+              printf '#!/usr/bin/env bash\n' | cat - "$f" > /tmp/shebang_tmp && mv /tmp/shebang_tmp "$f"
+              echo "Added shebang: $f"
+            fi
+          done
           echo "Applying style fixes..."
           find . -type f -name "*.sh" ! -path "./.git/*" ! -path "./node_modules/*" ! -path "./vendor/*" \
             -exec shfmt -i 4 -bn -ci -w {} +
@@ -221,8 +229,8 @@ jobs:
           set -euo pipefail
           
           # Configure git for commits
-          git config user.name "xaos-bot"
-          git config user.email "dev@xaostech.com"
+          git config user.name "${{ vars.BOT_NAME || 'xaos-bot' }}"
+          git config user.email "262248812+xaos-bot@users.noreply.github.com"
           git config user.signingkey "$(git config user.signingkey)"
           
           # Check if there are changes
@@ -278,6 +286,19 @@ jobs:
           echo "**Errors**: ${ERRORS:-0}" >> $GITHUB_STEP_SUMMARY
           echo "**Warnings**: ${WARNINGS:-0}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Surface errors directly in the job log (not just the step summary page)
+          if [[ -f /tmp/lint/results.json ]] && [[ "${ERRORS:-0}" -gt 0 ]]; then
+            echo "--- Errors ---"
+            jq -r '.[] | select(.level=="error") | "  \(.file):\(.line): [SC\(.code)] \(.message)"' \
+              /tmp/lint/results.json 2>/dev/null
+            echo "--------------"
+            echo "## ❌ Errors" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            jq -r '.[] | select(.level=="error") | "- `\(.file):\(.line)` [SC\(.code)] \(.message) — [wiki](https://www.shellcheck.net/wiki/SC\(.code))"' \
+              /tmp/lint/results.json 2>/dev/null >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
 
           if [[ -f /tmp/lint/suggestions.md ]]; then
             cat /tmp/lint/suggestions.md >> $GITHUB_STEP_SUMMARY
