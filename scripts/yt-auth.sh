@@ -269,7 +269,7 @@ show_status() {
     fi
     
     if (( CREATED_AT > 0 )); then
-        echo "Created: $(date -d @$CREATED_AT '+%Y-%m-%d %H:%M:%S')" >&2
+        echo "Created: $(date -d @"$CREATED_AT" '+%Y-%m-%d %H:%M:%S')" >&2
     fi
 }
 

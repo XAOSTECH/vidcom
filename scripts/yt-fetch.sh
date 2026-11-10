@@ -191,7 +191,7 @@ cmd_download() {
             --output "$output_file" \
             --no-playlist \
             --no-warnings \
-            $cookie_args \
+            "$cookie_args" \
             "https://www.youtube.com/watch?v=${video_id}" 2>&1; then
             
             if [[ -f "$output_file" ]]; then
