@@ -159,7 +159,7 @@ detect_highlights() {
         log_info "Running: $cmd"
         
         # Run highlight detection
-        if ! eval $cmd; then
+        if ! eval "$cmd"; then
             log_error "Highlight detection failed"
             return 1
         fi

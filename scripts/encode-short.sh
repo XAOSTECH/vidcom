@@ -305,7 +305,7 @@ OUT_SIZE=$(stat -c%s "$OUTPUT")
 OUT_DURATION=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$OUTPUT" 2>/dev/null | cut -d. -f1)
 
 log_info "Output: $OUTPUT"
-log_info "Size: $(numfmt --to=iec $OUT_SIZE)"
+log_info "Size: $(numfmt --to=iec "$OUT_SIZE")"
 log_info "Duration: ${OUT_DURATION}s"
 
 # Verify dimensions
